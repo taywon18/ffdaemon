@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ffconvert": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Users\\Taywon\\Videos\\Partage\\AutoEncoder"
+    }
+  }
+}
