@@ -46,6 +46,13 @@ public class ProgressBar : IDisposable, IProgress<double>
         Interlocked.Exchange(ref currentProgress, value);
     }
 
+    public void Report(double value, string suffix)
+    {
+        Report(value);
+
+        Interlocked.Exchange(ref Suffix, suffix);
+    }
+
     private void TimerHandler(object state)
     {
         lock (timer)

@@ -33,6 +33,8 @@ bool ShouldRemoveOldFile = true;
 bool ShouldSendRemovedToBin = true;
 bool ShouldKillFFMpegWhenExited = true;
 bool ShouldDeleteEmptyDirectories = true;
+bool ShouldDeleteTemporaryFile = true;
+int MaxHistorySize = 100;
 
 TimeSpan WaitingTime = TimeSpan.FromSeconds(60);
 
@@ -167,7 +169,12 @@ async Task<bool> Handle()
 
         string OutputPath = Path.Combine(WorkingDirectoryPath, "temporary" + "." + OutputExtension);
         if (File.Exists(OutputPath))
-            throw new Exception($"Safe lock: Please stop other encoding or remove file {OutputPath}.+");
+        {
+            if(!ShouldDeleteTemporaryFile)
+                throw new Exception($"Safe lock: Please stop other encoding or remove file {OutputPath}.+");
+
+            File.Delete(OutputPath);
+        }
 
         var ffmpegArgs = FFMpegArguments
             .FromFileInput(InputPath, true, options => options
@@ -198,11 +205,29 @@ async Task<bool> Handle()
 
         var progress = new ProgressBar(suffix: $" {relativeInputPath}");
 
+        List<KeyValuePair<DateTime, TimeSpan>> History = new();
         ffmpegArgs = ffmpegArgs.NotifyOnProgress((TimeSpan current) =>
         {
+            History.Add(new(DateTime.Now, current));
+            while (History.Count > MaxHistorySize && History.Count > 0)
+                History.RemoveAt(0);
+            TimeSpan? remainRealTime = null;
+            if(History.Count > 5)
+            {
+                var firstHistoryEntry = History.First();
+                var elapsedRealTimeSinceFirstEntry = DateTime.Now - firstHistoryEntry.Key;
+                var encodedTimeSinceFirstEntry = current - firstHistoryEntry.Value;
+                var remainEncoding = totalTime - current;
+
+                remainRealTime = TimeSpan.FromSeconds(remainEncoding.TotalSeconds * elapsedRealTimeSinceFirstEntry.TotalSeconds / encodedTimeSinceFirstEntry.TotalSeconds);
+            }
             var relativeProgress = current / totalTime;
 
-            progress.Report(relativeProgress);
+
+            progress.Report(relativeProgress
+                , remainRealTime == null 
+                    ? $" {relativeInputPath}"
+                    : $" {relativeInputPath}, {remainRealTime}");
         });
 
         bool worked = await ffmpegArgs.ProcessAsynchronously(false);
@@ -300,6 +325,10 @@ bool IsBadAspectRatio(FFMpegCore.IMediaAnalysis media)
 {
     if (media.PrimaryVideoStream == null)
         throw new Exception("Cannot handle non-video steam.");
+
+    // No SAR
+    if (media.PrimaryVideoStream.SampleAspectRatio.Width == 0 && media.PrimaryVideoStream.SampleAspectRatio.Height == 0)
+        return false;
 
     if (media.PrimaryVideoStream.SampleAspectRatio.Width != 1
     || media.PrimaryVideoStream.SampleAspectRatio.Height != 1)
