@@ -13,8 +13,8 @@ public class ProgressBar : IDisposable, IProgress<double>
     public string Suffix = string.Empty;
 
     private const int blockCount = 10;
-    private readonly TimeSpan animationInterval = TimeSpan.FromSeconds(1.0 / 8);
     private const string animation = @"|/-\";
+    private readonly TimeSpan animationInterval = TimeSpan.FromSeconds(1.0 / 8);
 
     private readonly Timer timer;
 
