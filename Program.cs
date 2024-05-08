@@ -107,11 +107,14 @@ async Task ClassicFrame()
     {
         if(isActive && !await Handle())
             await Task.Delay(WaitingTime);
+        else if(!isActive)
+            await Task.Delay(WaitingTime);
     }
     else if(isForcedActivity == false)
         await Task.Delay(WaitingTime);
     else if (isForcedActivity == true && !await Handle())
         await Task.Delay(WaitingTime);
+
 }
 
 //return true if convert, false otherwise
@@ -331,7 +334,7 @@ void PrintLogo()
     ffdeamon.IOManager.Information(
         "#########################################");
     ffdeamon.IOManager.Information("##                                     ##");
-    ffdeamon.IOManager.Information("##     =====      ", Flavor.Progress, "FFBOT", Flavor.Normal, "      =====     ##");
+    ffdeamon.IOManager.Information("##     =====    ", Flavor.Progress, "FFdeamon", Flavor.Normal, "     =====     ##");
     ffdeamon.IOManager.Information("##                                     ##");
     ffdeamon.IOManager.Information("#########################################");
     ffdeamon.IOManager.Information();

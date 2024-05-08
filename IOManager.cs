@@ -219,7 +219,7 @@ namespace ffdeamon
                                 break;
                         }
                     }
-                    await Task.Delay(50);  
+                    await Task.Delay(100);  
                 }
             }).ConfigureAwait(false);
         }
