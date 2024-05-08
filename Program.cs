@@ -1,4 +1,4 @@
-﻿using ffconvert;
+﻿using ffdeamon;
 using FFMpegCore;
 using FFMpegCore.Enums;
 using System.Text;
@@ -77,11 +77,11 @@ async Task FirstFrame()
 
     if (isActive && !await Handle())
     {
-        ffconvert.IOManager.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{conf.WorkingDirectoryPath}\"");
+        ffdeamon.IOManager.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{conf.WorkingDirectoryPath}\"");
         await Task.Delay(WaitingTime);
     }
     else if (!isActive)
-        ffconvert.IOManager.Information(Flavor.Important, "Waiting ", StartActivityBound, Flavor.Normal, $" for start...");
+        ffdeamon.IOManager.Information(Flavor.Important, "Waiting ", StartActivityBound, Flavor.Normal, $" for start...");
 }
 
 async Task ClassicFrame()
@@ -145,7 +145,7 @@ async Task<bool> Handle()
         catch (Exception e)
         {
             SkipBuffer.Add(InputPath);
-            ffconvert.IOManager.Error($"Cannot analyse {InputPath}: {e}");
+            ffdeamon.IOManager.Error($"Cannot analyse {InputPath}: {e}");
             continue;
         }
         var totalTime = mediaInfo.Duration;
@@ -204,7 +204,7 @@ async Task<bool> Handle()
                 CustomInputsArgs += $" -txt_format text -fix_sub_duration";
         }
 
-        ffconvert.IOManager.Debug($"Converting {InputPath}...");
+        ffdeamon.IOManager.Debug($"Converting {InputPath}...");
 
         string ConsoleBuffer = "";
 
@@ -227,7 +227,7 @@ async Task<bool> Handle()
                     ConsoleBuffer += message;
             });
 
-        ffconvert.IOManager.Debug($"Executed command: {ffmpegArgs.Arguments}");
+        ffdeamon.IOManager.Debug($"Executed command: {ffmpegArgs.Arguments}");
 
         string relativeInputPath = Path.GetRelativePath(conf.WorkingDirectoryPath, InputPath);
         string? InputDirRelative = null;
@@ -268,7 +268,7 @@ async Task<bool> Handle()
         SkipBuffer.Add(InputPath);
         if (!worked)
         {
-            ffconvert.IOManager.Error($"Encoding failed for {InputPath}.");
+            ffdeamon.IOManager.Error($"Encoding failed for {InputPath}.");
             SkipBuffer.Add(InputPath);
             if (File.Exists(OutputPath))
                 File.Delete(OutputPath);
@@ -277,7 +277,7 @@ async Task<bool> Handle()
 
         var newMediaInfo = await FFProbe.AnalyseAsync(OutputPath);
         if (ShouldEncode(newMediaInfo, true))
-            ffconvert.IOManager.Error($"Warning, file analysis for {OutputPath} mark this file as non-encoded.");
+            ffdeamon.IOManager.Error($"Warning, file analysis for {OutputPath} mark this file as non-encoded.");
 
         if (fiInput.DirectoryName == null)
             throw new Exception($"Safe lock: empty DirectoryName for {fiInput}.");
@@ -306,7 +306,7 @@ async Task<bool> Handle()
 
         File.Move(OutputPath, newInputPath);
         if (!File.Exists(newInputPath))
-            ffconvert.IOManager.Error($"Move failed, cannot file any file at {newInputPath}.");
+            ffdeamon.IOManager.Error($"Move failed, cannot file any file at {newInputPath}.");
 
         if (conf.ShouldDeleteEmptyDirectories
         && conf.ForcedDestinationDirectoryPath != null
@@ -315,7 +315,7 @@ async Task<bool> Handle()
         && !Directory.EnumerateFileSystemEntries(fiInput.DirectoryName).Any())
             Directory.Delete(fiInput.DirectoryName);
 
-        ffconvert.IOManager.Information(Flavor.Ok, "Fichier remplacé avec succès", Flavor.Normal, $": {InputPath}.");
+        ffdeamon.IOManager.Information(Flavor.Ok, "Fichier remplacé avec succès", Flavor.Normal, $": {InputPath}.");
         return true;
     }
 
@@ -328,58 +328,58 @@ async Task<bool> Handle()
 
 void PrintLogo()
 {
-    ffconvert.IOManager.Information(
+    ffdeamon.IOManager.Information(
         "#########################################");
-    ffconvert.IOManager.Information("##                                     ##");
-    ffconvert.IOManager.Information("##     =====      ", Flavor.Progress, "FFBOT", Flavor.Normal, "      =====     ##");
-    ffconvert.IOManager.Information("##                                     ##");
-    ffconvert.IOManager.Information("#########################################");
-    ffconvert.IOManager.Information();
+    ffdeamon.IOManager.Information("##                                     ##");
+    ffdeamon.IOManager.Information("##     =====      ", Flavor.Progress, "FFBOT", Flavor.Normal, "      =====     ##");
+    ffdeamon.IOManager.Information("##                                     ##");
+    ffdeamon.IOManager.Information("#########################################");
+    ffdeamon.IOManager.Information();
 }
 
 void PrintConfiguration()
 {
 #pragma warning disable CS8604 // Existence possible d'un argument de référence null.
-    ffconvert.IOManager.Information($"Working directory: ", Flavor.Important, conf.WorkingDirectoryPath);
-    ffconvert.IOManager.Information($"Forced destination path : ", Flavor.Important, conf.ForcedDestinationDirectoryPath);
+    ffdeamon.IOManager.Information($"Working directory: ", Flavor.Important, conf.WorkingDirectoryPath);
+    ffdeamon.IOManager.Information($"Forced destination path : ", Flavor.Important, conf.ForcedDestinationDirectoryPath);
 
-    ffconvert.IOManager.Information($"Allowed inputs: ", Flavor.Important, string.Join(",", conf.AllowedInputs));
-    ffconvert.IOManager.Information($"Output extension: ", Flavor.Important, conf.OutputExtension);
-    ffconvert.IOManager.Information($"Targeted video codec: ", Flavor.Important, conf.TargetedVideoCodec);
+    ffdeamon.IOManager.Information($"Allowed inputs: ", Flavor.Important, string.Join(",", conf.AllowedInputs));
+    ffdeamon.IOManager.Information($"Output extension: ", Flavor.Important, conf.OutputExtension);
+    ffdeamon.IOManager.Information($"Targeted video codec: ", Flavor.Important, conf.TargetedVideoCodec);
 
-    ffconvert.IOManager.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomInputArguments);
-    ffconvert.IOManager.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomOutputArguments);
+    ffdeamon.IOManager.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomInputArguments);
+    ffdeamon.IOManager.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomOutputArguments);
 
-    ffconvert.IOManager.Information($"Should set aspect ratio to 1:1: ", conf.ShouldSetRatioToOneOne);
-    ffconvert.IOManager.Information($"Should use smart audio encoding: ", conf.SmartAudioEncoding);
-    ffconvert.IOManager.Information($"Should keep only one video stream: ", conf.KeepOnlyOneVideoStream);
-    ffconvert.IOManager.Information($"Should remove old file: ", conf.ShouldRemoveOldFile);
-    ffconvert.IOManager.Information($"Should send removed to bin: ", conf.ShouldSendRemovedToBin);
-    ffconvert.IOManager.Information($"Should kill ffmpeg when exited: ", conf.ShouldKillFFMpegWhenExited);
-    ffconvert.IOManager.Information($"Should delete empty directories: ", conf.ShouldDeleteEmptyDirectories);
-    ffconvert.IOManager.Information($"Should delete temporary file at start: ", conf.ShouldDeleteTemporaryFile);
+    ffdeamon.IOManager.Information($"Should set aspect ratio to 1:1: ", conf.ShouldSetRatioToOneOne);
+    ffdeamon.IOManager.Information($"Should use smart audio encoding: ", conf.SmartAudioEncoding);
+    ffdeamon.IOManager.Information($"Should keep only one video stream: ", conf.KeepOnlyOneVideoStream);
+    ffdeamon.IOManager.Information($"Should remove old file: ", conf.ShouldRemoveOldFile);
+    ffdeamon.IOManager.Information($"Should send removed to bin: ", conf.ShouldSendRemovedToBin);
+    ffdeamon.IOManager.Information($"Should kill ffmpeg when exited: ", conf.ShouldKillFFMpegWhenExited);
+    ffdeamon.IOManager.Information($"Should delete empty directories: ", conf.ShouldDeleteEmptyDirectories);
+    ffdeamon.IOManager.Information($"Should delete temporary file at start: ", conf.ShouldDeleteTemporaryFile);
 
-    ffconvert.IOManager.Information($"History max size: ", conf.MaxHistorySize);
-    ffconvert.IOManager.Information($"Console buffer max size: ", conf.MaxConsoleBufferSize);
-    ffconvert.IOManager.Information($"Console minimum verbosity: ", Flavor.Important, ffconvert.IOManager.MinConsoleVerbosity.ToString());
+    ffdeamon.IOManager.Information($"History max size: ", conf.MaxHistorySize);
+    ffdeamon.IOManager.Information($"Console buffer max size: ", conf.MaxConsoleBufferSize);
+    ffdeamon.IOManager.Information($"Console minimum verbosity: ", Flavor.Important, ffdeamon.IOManager.MinConsoleVerbosity.ToString());
 
-    ffconvert.IOManager.Information($"Idle time: ", WaitingTime);
-    ffconvert.IOManager.Information($"Start time: ", StartActivityBound);
-    ffconvert.IOManager.Information($"Stop time: ", StopActivityBound);
+    ffdeamon.IOManager.Information($"Idle time: ", WaitingTime);
+    ffdeamon.IOManager.Information($"Start time: ", StartActivityBound);
+    ffdeamon.IOManager.Information($"Stop time: ", StopActivityBound);
 
-    ffconvert.IOManager.Information();
+    ffdeamon.IOManager.Information();
     #pragma warning restore CS8604 // Existence possible d'un argument de référence null.
 }
 
 void PrintInteractivity()
 {
-    ffconvert.IOManager.Information("Force awake: ", Flavor.Important, "F1");
-    ffconvert.IOManager.Information("Force sleep: ", Flavor.Important, "F2");
-    ffconvert.IOManager.Information("Restore state: ", Flavor.Important, "F3");
+    ffdeamon.IOManager.Information("Force awake: ", Flavor.Important, "F1");
+    ffdeamon.IOManager.Information("Force sleep: ", Flavor.Important, "F2");
+    ffdeamon.IOManager.Information("Restore state: ", Flavor.Important, "F3");
 
-    ffconvert.IOManager.Information("Schedule stop: ", Flavor.Important, "F10");
-    ffconvert.IOManager.Information("Unschedule stop: ", Flavor.Important, "F11");
-    ffconvert.IOManager.Information("Exit now: ", Flavor.Important, "F12");
+    ffdeamon.IOManager.Information("Schedule stop: ", Flavor.Important, "F10");
+    ffdeamon.IOManager.Information("Unschedule stop: ", Flavor.Important, "F11");
+    ffdeamon.IOManager.Information("Exit now: ", Flavor.Important, "F12");
 
     IOManager.Information();
 }
@@ -457,7 +457,7 @@ bool ActivateIfNeeded()
             || (StartActivityBound > StopActivityBound && now >= StartActivityBound || now < StopActivityBound))
 )
         {
-            ffconvert.IOManager.Debug("Leaving sleeping mode.");
+            ffdeamon.IOManager.Debug("Leaving sleeping mode.");
             Active = true;
             return true;
         }
@@ -475,7 +475,7 @@ bool DisableIfNeeded()
         && ((StartActivityBound < StopActivityBound && now < StartActivityBound || now >= StopActivityBound)
         || (StartActivityBound > StopActivityBound && now >= StopActivityBound && now < StartActivityBound)))
         {
-            ffconvert.IOManager.Debug("Entering in sleeping mode.");
+            ffdeamon.IOManager.Debug("Entering in sleeping mode.");
             Active = false;
             return true;
         }
@@ -497,20 +497,20 @@ bool ShouldEncode(FFMpegCore.IMediaAnalysis? media, bool verbose = false)
     // encode if more than 1 video stream
     if (conf.KeepOnlyOneVideoStream && media.VideoStreams.Count > 1)
     {
-        ffconvert.IOManager.Debug($"Marked as non-encoded: found multiples video streams ({media.VideoStreams.Count}).");
+        ffdeamon.IOManager.Debug($"Marked as non-encoded: found multiples video streams ({media.VideoStreams.Count}).");
         return true;
     }        
 
     // encode bad codec
     if (media.PrimaryVideoStream.CodecName != conf.TargetedVideoCodec)
     {
-        ffconvert.IOManager.Debug($"Marked as non-encoded: bad video codec found ({media.PrimaryVideoStream.CodecName}).");
+        ffdeamon.IOManager.Debug($"Marked as non-encoded: bad video codec found ({media.PrimaryVideoStream.CodecName}).");
         return true;
     }
 
     if (conf.ShouldSetRatioToOneOne && IsBadAspectRatio(media))
     {
-        ffconvert.IOManager.Debug($"Marked as non-encoded: bad SAR found ({media.PrimaryVideoStream.SampleAspectRatio.Width}):{media.PrimaryVideoStream.SampleAspectRatio.Height}.");
+        ffdeamon.IOManager.Debug($"Marked as non-encoded: bad SAR found ({media.PrimaryVideoStream.SampleAspectRatio.Width}):{media.PrimaryVideoStream.SampleAspectRatio.Height}.");
         return true;
     }
 

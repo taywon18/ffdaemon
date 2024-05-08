@@ -3,7 +3,7 @@ using FFMpegCore;
 using System.Reflection;
 using System.Text.Json;
 
-namespace ffconvert;
+namespace ffdeamon;
 
 public class Configuration
 {

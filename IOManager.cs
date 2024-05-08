@@ -1,6 +1,6 @@
 ﻿using System.Drawing;
 
-namespace ffconvert
+namespace ffdeamon
 {        
     public enum Verbosity
     {
