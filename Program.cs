@@ -11,25 +11,7 @@ Console.OutputEncoding = Encoding.UTF8;
 
 HashSet<string> SkipBuffer = new();
 
-string WorkingDirectoryPath = Environment.CurrentDirectory;
-string? ForcedDestinationDirectoryPath = "../Encoded";
-
-string[] AllowedInputs = new[] { ".mkv", ".avi", ".vp9", ".ts", ".mp4", ".webm" };
-string OutputExtension = "mkv";
-string TargetedVideoCodec = "vp9";
-string? BaseCustomInputArguments = "-y -probesize 1000000000 -analyzeduration 100000000";
-string? BaseCustomOutputArguments = "";
-bool ShouldSetRatioToOneOne = true;
-bool SmartAudioEncoding = true;
-bool KeepOnlyOneVideoStream = true;
-bool ShouldRemoveOldFile = true;
-bool ShouldSendRemovedToBin = false;
-bool ShouldKillFFMpegWhenExited = true;
-bool ShouldDeleteEmptyDirectories = true;
-bool ShouldDeleteTemporaryFile = true;
-int MaxHistorySize = 100;
-int MaxConsoleBufferSize = 25000;
-Logger.MinConsoleVerbosity = Verbosity.Information;
+Configuration conf = new Configuration();
 
 TimeSpan WaitingTime = TimeSpan.FromSeconds(60);
 TimeSpan? StartActivityBound = TimeSpan.FromHours(23);
@@ -39,11 +21,13 @@ bool Active = true;
 Action CancelCurrentFFMPeg = () => { };
 AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnExited);
 
-string OutputPath = Path.Combine(WorkingDirectoryPath, "temporary" + "." + OutputExtension);
+string OutputPath = Path.Combine(conf.WorkingDirectoryPath, "temporary" + "." + conf.OutputExtension);
 
 // Main program:
 
 PrintLogo();
+conf.LoadFromCommandLine();
+conf.LoadFromConfigFile();
 PrintConfiguration();
 await Start();
 
@@ -53,12 +37,12 @@ await Start();
 
 async Task Start()
 {
-    if (ForcedDestinationDirectoryPath != null && !Directory.Exists(ForcedDestinationDirectoryPath))
-        Directory.CreateDirectory(ForcedDestinationDirectoryPath);
+    if (conf.ForcedDestinationDirectoryPath != null && !Directory.Exists(conf.ForcedDestinationDirectoryPath))
+        Directory.CreateDirectory(conf.ForcedDestinationDirectoryPath);
 
     if (File.Exists(OutputPath))
     {
-        if (!ShouldDeleteTemporaryFile)
+        if (!conf.ShouldDeleteTemporaryFile)
             throw new Exception($"Safe lock: Please stop other encoding or remove file {OutputPath}.+");
 
         File.Delete(OutputPath);
@@ -74,7 +58,7 @@ async Task FirstFrame()
 {
     if (Active && !await Handle())
     {
-        Logger.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{WorkingDirectoryPath}\"");
+        Logger.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{conf.WorkingDirectoryPath}\"");
         await Task.Delay(WaitingTime);
     }
     else if (!Active)
@@ -98,15 +82,15 @@ async Task ClassicFrame()
 //return true if convert, false otherwise
 async Task<bool> Handle()
 {
-    var rawCandidates = Directory.GetFiles(WorkingDirectoryPath, "*", searchOption: SearchOption.AllDirectories);
+    var rawCandidates = Directory.GetFiles(conf.WorkingDirectoryPath, "*", searchOption: SearchOption.AllDirectories);
     var candidates = rawCandidates
-        .Where(file => AllowedInputs.Any(file.ToLower().EndsWith))
+        .Where(file => conf.AllowedInputs.Any(file.ToLower().EndsWith))
         .ToList();
 
     foreach (var InputPath in candidates)
     {
-        string CustomInputsArgs = BaseCustomInputArguments;
-        string CustomOutputArgs = BaseCustomOutputArguments;
+        string CustomInputsArgs = conf.BaseCustomInputArguments ?? "";
+        string CustomOutputArgs = conf.BaseCustomOutputArguments ?? "";
 
         if (SkipBuffer.Contains(InputPath))
             continue;
@@ -138,12 +122,14 @@ async Task<bool> Handle()
             continue;
         }
 
-        if (!KeepOnlyOneVideoStream)
+        if (!conf.KeepOnlyOneVideoStream)
             throw new NotImplementedException();
         else
             CustomOutputArgs += " -map 0:v:0 -c:v libvpx-vp9";
 
-        if (ShouldSetRatioToOneOne && IsBadAspectRatio(mediaInfo))
+        if (conf.ShouldSetRatioToOneOne 
+            && mediaInfo.PrimaryVideoStream != null
+            && IsBadAspectRatio(mediaInfo))
         {
             int w = (int)((double)mediaInfo.PrimaryVideoStream.Width * (double)(mediaInfo.PrimaryVideoStream.SampleAspectRatio.Width) / (double)(mediaInfo.PrimaryVideoStream.SampleAspectRatio.Height));
             int h = mediaInfo.PrimaryVideoStream.Height;
@@ -152,7 +138,7 @@ async Task<bool> Handle()
         }
 
         CustomOutputArgs += " -map 0:a";
-        if (!SmartAudioEncoding)
+        if (!conf.SmartAudioEncoding)
             CustomOutputArgs += " -c:a libvorbis";
         else
             for (int i = 0; i < mediaInfo.AudioStreams.Count; i++)
@@ -197,23 +183,21 @@ async Task<bool> Handle()
             .CancellableThrough(out CancelCurrentFFMPeg)
             .NotifyOnError((string message) =>
             {
-                if (ConsoleBuffer.Length < MaxConsoleBufferSize)
+                if (ConsoleBuffer.Length < conf.MaxConsoleBufferSize)
                     ConsoleBuffer += message;
             })
             .NotifyOnOutput((string message) =>
             {
-                if (ConsoleBuffer.Length < MaxConsoleBufferSize)
+                if (ConsoleBuffer.Length < conf.MaxConsoleBufferSize)
                     ConsoleBuffer += message;
             });
 
-
-
         Logger.Debug($"Executed command: {ffmpegArgs.Arguments}");
 
-        string relativeInputPath = Path.GetRelativePath(WorkingDirectoryPath, InputPath);
+        string relativeInputPath = Path.GetRelativePath(conf.WorkingDirectoryPath, InputPath);
         string? InputDirRelative = null;
         if (fiInput.DirectoryName != null)
-            InputDirRelative = Path.GetRelativePath(WorkingDirectoryPath, fiInput.DirectoryName);
+            InputDirRelative = Path.GetRelativePath(conf.WorkingDirectoryPath, fiInput.DirectoryName);
 
         var progress = new ProgressBar(suffix: $" {relativeInputPath}");
 
@@ -221,7 +205,7 @@ async Task<bool> Handle()
         ffmpegArgs = ffmpegArgs.NotifyOnProgress((TimeSpan current) =>
         {
             History.Add(new(DateTime.Now, current));
-            while (History.Count > MaxHistorySize && History.Count > 0)
+            while (History.Count > conf.MaxHistorySize && History.Count > 0)
                 History.RemoveAt(0);
             TimeSpan? remainRealTime = null;
             if (History.Count > 5)
@@ -264,9 +248,9 @@ async Task<bool> Handle()
             throw new Exception($"Safe lock: empty DirectoryName for {fiInput}.");
 
         string newInputPath;
-        string newInputFileName = Path.GetFileNameWithoutExtension(InputPath) + "." + OutputExtension;
-        if (ForcedDestinationDirectoryPath != null)
-            newInputPath = Path.Combine(ForcedDestinationDirectoryPath, InputDirRelative, newInputFileName);
+        string newInputFileName = Path.GetFileNameWithoutExtension(InputPath) + "." + conf.OutputExtension;
+        if (conf.ForcedDestinationDirectoryPath != null)
+            newInputPath = Path.Combine(conf.ForcedDestinationDirectoryPath, InputDirRelative ?? "", newInputFileName);
         else
             newInputPath = Path.Combine(fiInput.DirectoryName, newInputFileName);
 
@@ -274,7 +258,7 @@ async Task<bool> Handle()
         if (newInputFi.DirectoryName != null && !Directory.Exists(newInputFi.DirectoryName))
             Directory.CreateDirectory(newInputFi.DirectoryName);
 
-        if (ShouldRemoveOldFile)
+        if (conf.ShouldRemoveOldFile)
         {
             /*Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(
                 InputPath,
@@ -289,10 +273,10 @@ async Task<bool> Handle()
         if (!File.Exists(newInputPath))
             Logger.Error($"Move failed, cannot file any file at {newInputPath}.");
 
-        if (ShouldDeleteEmptyDirectories
-        && ForcedDestinationDirectoryPath != null
+        if (conf.ShouldDeleteEmptyDirectories
+        && conf.ForcedDestinationDirectoryPath != null
         && fiInput.DirectoryName != null
-        && fiInput.DirectoryName != WorkingDirectoryPath
+        && fiInput.DirectoryName != conf.WorkingDirectoryPath
         && !Directory.EnumerateFileSystemEntries(fiInput.DirectoryName).Any())
             Directory.Delete(fiInput.DirectoryName);
 
@@ -320,27 +304,28 @@ void PrintLogo()
 
 void PrintConfiguration()
 {
-    Logger.Information($"Working directory: ", Flavor.Important, WorkingDirectoryPath);
-    Logger.Information($"Forced destination path : ", Flavor.Important, ForcedDestinationDirectoryPath);
+    #pragma warning disable CS8604 // Existence possible d'un argument de référence null.
+    Logger.Information($"Working directory: ", Flavor.Important, conf.WorkingDirectoryPath);
+    Logger.Information($"Forced destination path : ", Flavor.Important, conf.ForcedDestinationDirectoryPath);
 
-    Logger.Information($"Allowed inputs: ", Flavor.Important, string.Join(",", AllowedInputs));
-    Logger.Information($"Output extension: ", Flavor.Important, OutputExtension);
-    Logger.Information($"Targeted video codec: ", Flavor.Important, TargetedVideoCodec);
+    Logger.Information($"Allowed inputs: ", Flavor.Important, string.Join(",", conf.AllowedInputs));
+    Logger.Information($"Output extension: ", Flavor.Important, conf.OutputExtension);
+    Logger.Information($"Targeted video codec: ", Flavor.Important, conf.TargetedVideoCodec);
 
-    Logger.Information($"Base custom input arguments: ", Flavor.Important, BaseCustomInputArguments);
-    Logger.Information($"Base custom input arguments: ", Flavor.Important, BaseCustomOutputArguments);
+    Logger.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomInputArguments);
+    Logger.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomOutputArguments);
 
-    Logger.Information($"Should set aspect ratio to 1:1: ", ShouldSetRatioToOneOne);
-    Logger.Information($"Should use smart audio encoding: ", SmartAudioEncoding);
-    Logger.Information($"Should keep only one video stream: ", KeepOnlyOneVideoStream);
-    Logger.Information($"Should remove old file: ", ShouldRemoveOldFile);
-    Logger.Information($"Should send removed to bin: ", ShouldSendRemovedToBin);
-    Logger.Information($"Should kill ffmpeg when exited: ", ShouldKillFFMpegWhenExited);
-    Logger.Information($"Should delete empty directories: ", ShouldDeleteEmptyDirectories);
-    Logger.Information($"Should delete temporary file at start: ", ShouldDeleteTemporaryFile);
+    Logger.Information($"Should set aspect ratio to 1:1: ", conf.ShouldSetRatioToOneOne);
+    Logger.Information($"Should use smart audio encoding: ", conf.SmartAudioEncoding);
+    Logger.Information($"Should keep only one video stream: ", conf.KeepOnlyOneVideoStream);
+    Logger.Information($"Should remove old file: ", conf.ShouldRemoveOldFile);
+    Logger.Information($"Should send removed to bin: ", conf.ShouldSendRemovedToBin);
+    Logger.Information($"Should kill ffmpeg when exited: ", conf.ShouldKillFFMpegWhenExited);
+    Logger.Information($"Should delete empty directories: ", conf.ShouldDeleteEmptyDirectories);
+    Logger.Information($"Should delete temporary file at start: ", conf.ShouldDeleteTemporaryFile);
 
-    Logger.Information($"History max size: ", MaxHistorySize);
-    Logger.Information($"Console buffer max size: ", MaxConsoleBufferSize);
+    Logger.Information($"History max size: ", conf.MaxHistorySize);
+    Logger.Information($"Console buffer max size: ", conf.MaxConsoleBufferSize);
     Logger.Information($"Console minimum verbosity: ", Flavor.Important, Logger.MinConsoleVerbosity.ToString());
 
     Logger.Information($"Idle time: ", WaitingTime);
@@ -348,21 +333,24 @@ void PrintConfiguration()
     Logger.Information($"Stop time: ", StopActivityBound);
 
     Logger.Information();
+    #pragma warning restore CS8604 // Existence possible d'un argument de référence null.
+
 }
 
 void OnExited(object? sender, EventArgs e)
 {
-    if (ShouldKillFFMpegWhenExited)
+    if (conf.ShouldKillFFMpegWhenExited)
         CancelCurrentFFMPeg();
 }
 
 bool ActivateIfNeeded()
 {
     var now = DateTime.Now.TimeOfDay;
-    if (StopActivityBound != null
+    if (!Active
+        && StopActivityBound != null
         && StartActivityBound != null
-        && (StartActivityBound < StopActivityBound && now >= StartActivityBound && now < StopActivityBound)
-        || (StartActivityBound > StopActivityBound && now >= StartActivityBound || now < StopActivityBound)
+        && ((StartActivityBound < StopActivityBound && now >= StartActivityBound && now < StopActivityBound)
+        || (StartActivityBound > StopActivityBound && now >= StartActivityBound || now < StopActivityBound))
 )
     {
         Logger.Debug("Leaving sleeping mode.");
@@ -379,8 +367,8 @@ bool DisableIfNeeded()
     if (Active
     && StopActivityBound != null
     && StartActivityBound != null
-    && (StartActivityBound < StopActivityBound && now < StartActivityBound || now >= StopActivityBound)
-    || (StartActivityBound > StopActivityBound && now >= StopActivityBound && now < StartActivityBound))
+    && ((StartActivityBound < StopActivityBound && now < StartActivityBound || now >= StopActivityBound)
+    || (StartActivityBound > StopActivityBound && now >= StopActivityBound && now < StartActivityBound)))
     {
         Logger.Debug("Entering in sleeping mode.");
         Active = false;
@@ -402,20 +390,20 @@ bool ShouldEncode(FFMpegCore.IMediaAnalysis? media, bool verbose = false)
         return false;
 
     // encode if more than 1 video stream
-    if (KeepOnlyOneVideoStream && media.VideoStreams.Count > 1)
+    if (conf.KeepOnlyOneVideoStream && media.VideoStreams.Count > 1)
     {
         Logger.Debug($"Marked as non-encoded: found multiples video streams ({media.VideoStreams.Count}).");
         return true;
     }        
 
     // encode bad codec
-    if (media.PrimaryVideoStream.CodecName != TargetedVideoCodec)
+    if (media.PrimaryVideoStream.CodecName != conf.TargetedVideoCodec)
     {
         Logger.Debug($"Marked as non-encoded: bad video codec found ({media.PrimaryVideoStream.CodecName}).");
         return true;
     }
 
-    if (ShouldSetRatioToOneOne && IsBadAspectRatio(media))
+    if (conf.ShouldSetRatioToOneOne && IsBadAspectRatio(media))
     {
         Logger.Debug($"Marked as non-encoded: bad SAR found ({media.PrimaryVideoStream.SampleAspectRatio.Width}):{media.PrimaryVideoStream.SampleAspectRatio.Height}.");
         return true;

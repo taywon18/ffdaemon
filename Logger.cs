@@ -136,7 +136,13 @@ namespace ffconvert
             }
             else if (obj is string s)
             {
-                Console.Write(s);
+                if(s == "")
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkCyan;
+                    Console.Write("(empty)");
+                }
+                else
+                    Console.Write(s);
             }
             else if (obj is bool b)
             {
