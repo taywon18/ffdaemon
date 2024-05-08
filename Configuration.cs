@@ -9,6 +9,8 @@ public class Configuration
 {
     [Option('c', "config", Required = false, HelpText = "Set configuration file path")]
     public string? Config { get; set; }
+    [Option('i', "interactive", Required = false, HelpText = "Set interactive mode")]
+    public bool Interactive { get; set; } = true;
 
     [Option('d', "directory", Required = false, HelpText = "Force working directory")]
     public string WorkingDirectoryPath { get; set; } = Environment.CurrentDirectory;
@@ -53,13 +55,13 @@ public class Configuration
     {
         if(String.IsNullOrEmpty(Config))
         {
-            Logger.Debug("Not any configuration file path set.");
+            IOManager.Debug("Not any configuration file path set.");
             return;
         }
 
         if(!File.Exists(Config))
         {
-            Logger.Error("Cannot find configuration file at path ", Flavor.Important, Config);
+            IOManager.Error("Cannot find configuration file at path ", Flavor.Important, Config);
             return;
         }
 
@@ -70,7 +72,7 @@ public class Configuration
 
             if (config == null)
             {
-                Logger.Error("Cannot load configuration from file at ", Flavor.Important, Config);
+                IOManager.Error("Cannot load configuration from file at ", Flavor.Important, Config);
                 return;
             }
 
@@ -78,7 +80,7 @@ public class Configuration
         }
         catch(Exception ex)
         {
-            Logger.Error("Cannot load configuration from file at ", Flavor.Important, Config, Flavor.Normal, ", exception thrown: ", ex);
+            IOManager.Error("Cannot load configuration from file at ", Flavor.Important, Config, Flavor.Normal, ", exception thrown: ", ex);
             return;
         }
 
@@ -89,7 +91,7 @@ public class Configuration
         var res = Parser.Default.ParseArguments<Configuration>(Environment.GetCommandLineArgs());
         if(res == null)
         {
-            Logger.Error("Argument parsing failed.");
+            IOManager.Error("Argument parsing failed.");
             return;
         }
         ImportFrom(res.Value);

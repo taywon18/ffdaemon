@@ -19,10 +19,21 @@ namespace ffconvert
         Progress
     }
 
-    public static class Logger
+    public class InteractivityCallbacks
+    {
+        public Action OnQuit { get; set; } = () => { };
+        public Action OnScheduleStop { get; set; } = () => { };
+        public Action OnUnscheduleStop { get; set; } = () => { };
+        public Action OnForceSleep { get; set; } = () => { };
+        public Action OnForceAwake { get; set; } = () => { };
+        public Action OnUnforceState { get; set; } = () => { };
+    }
+
+    public static class IOManager
     {
         public static ConsoleColor DefaultBackgroundColor { get; }= ConsoleColor.Black;
         public static ConsoleColor DefaultForegroundColor { get; } = ConsoleColor.Gray;
+        public static InteractivityCallbacks Callbacks { get; } = new();
 
         private static object Mutex = new object();
 
@@ -172,6 +183,45 @@ namespace ffconvert
 
             Console.BackgroundColor = background;
             Console.ForegroundColor = foreground;
+        }
+
+        public static void StartInteractivity(CancellationToken tk = default)
+        {
+            Task.Run(async () =>
+            {
+                while (!tk.IsCancellationRequested)
+                {
+                    if (Console.KeyAvailable)
+                    {
+                        ConsoleKeyInfo key = Console.ReadKey(true);
+                        switch (key.Key)
+                        {
+                            case ConsoleKey.F1:
+                                Callbacks.OnForceAwake();
+                                break;
+                            case ConsoleKey.F2:
+                                Callbacks.OnForceSleep();
+                                break;                            
+                            case ConsoleKey.F3:
+                                Callbacks.OnUnforceState();
+                                break;
+
+                            case ConsoleKey.F6:
+                                Callbacks.OnScheduleStop();
+                                break;                            
+                            case ConsoleKey.F7:
+                                Callbacks.OnUnscheduleStop();
+                                break;
+                            case ConsoleKey.F8:
+                                Callbacks.OnQuit();
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    await Task.Delay(50);  
+                }
+            }).ConfigureAwait(false);
         }
     }
 }

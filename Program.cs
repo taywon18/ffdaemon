@@ -1,13 +1,14 @@
 ﻿using ffconvert;
 using FFMpegCore;
+using FFMpegCore.Enums;
 using System.Text;
 
 #region Boot
 
 //Configuration:
 
-Console.CursorVisible = false;
-Console.OutputEncoding = Encoding.UTF8;
+System.Console.CursorVisible = false;
+System.Console.OutputEncoding = Encoding.UTF8;
 
 HashSet<string> SkipBuffer = new();
 
@@ -16,7 +17,11 @@ Configuration conf = new Configuration();
 TimeSpan WaitingTime = TimeSpan.FromSeconds(60);
 TimeSpan? StartActivityBound = TimeSpan.FromHours(23);
 TimeSpan? StopActivityBound = TimeSpan.FromHours(7);
+
+object InteractivityMutex = new object();
 bool Active = true;
+bool? ForceActive = null;
+bool ScheduleStop = false;
 
 Action CancelCurrentFFMPeg = () => { };
 AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnExited);
@@ -29,6 +34,10 @@ PrintLogo();
 conf.LoadFromCommandLine();
 conf.LoadFromConfigFile();
 PrintConfiguration();
+SetupInteractivity();
+
+
+
 await Start();
 
 #endregion
@@ -51,18 +60,28 @@ async Task Start()
 
     await FirstFrame();
     while (true)
+    {
+        if (ScheduleStop)
+            break;
         await ClassicFrame();
+    }
 }
 
 async Task FirstFrame()
 {
-    if (Active && !await Handle())
+    
+    bool isActive;
+
+    lock (InteractivityMutex)
+        isActive = Active;
+
+    if (isActive && !await Handle())
     {
-        Logger.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{conf.WorkingDirectoryPath}\"");
+        ffconvert.IOManager.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{conf.WorkingDirectoryPath}\"");
         await Task.Delay(WaitingTime);
     }
-    else if (!Active)
-        Logger.Information(Flavor.Important, "Waiting ", StartActivityBound, Flavor.Normal, $" for start...");
+    else if (!isActive)
+        ffconvert.IOManager.Information(Flavor.Important, "Waiting ", StartActivityBound, Flavor.Normal, $" for start...");
 }
 
 async Task ClassicFrame()
@@ -75,7 +94,23 @@ async Task ClassicFrame()
 
     ActivateIfNeeded();
 
-    if (Active && !await Handle())
+    bool isActive;
+    bool? isForcedActivity;
+    lock (InteractivityMutex)
+    {
+        isActive = Active;
+        isForcedActivity = ForceActive;
+    }
+        
+
+    if (isForcedActivity == null)
+    {
+        if(isActive && !await Handle())
+            await Task.Delay(WaitingTime);
+    }
+    else if(isForcedActivity == false)
+        await Task.Delay(WaitingTime);
+    else if (isForcedActivity == true && !await Handle())
         await Task.Delay(WaitingTime);
 }
 
@@ -110,7 +145,7 @@ async Task<bool> Handle()
         catch (Exception e)
         {
             SkipBuffer.Add(InputPath);
-            Logger.Error($"Cannot analyse {InputPath}: {e}");
+            ffconvert.IOManager.Error($"Cannot analyse {InputPath}: {e}");
             continue;
         }
         var totalTime = mediaInfo.Duration;
@@ -169,7 +204,7 @@ async Task<bool> Handle()
                 CustomInputsArgs += $" -txt_format text -fix_sub_duration";
         }
 
-        Logger.Debug($"Converting {InputPath}...");
+        ffconvert.IOManager.Debug($"Converting {InputPath}...");
 
         string ConsoleBuffer = "";
 
@@ -192,7 +227,7 @@ async Task<bool> Handle()
                     ConsoleBuffer += message;
             });
 
-        Logger.Debug($"Executed command: {ffmpegArgs.Arguments}");
+        ffconvert.IOManager.Debug($"Executed command: {ffmpegArgs.Arguments}");
 
         string relativeInputPath = Path.GetRelativePath(conf.WorkingDirectoryPath, InputPath);
         string? InputDirRelative = null;
@@ -233,7 +268,7 @@ async Task<bool> Handle()
         SkipBuffer.Add(InputPath);
         if (!worked)
         {
-            Logger.Error($"Encoding failed for {InputPath}.");
+            ffconvert.IOManager.Error($"Encoding failed for {InputPath}.");
             SkipBuffer.Add(InputPath);
             if (File.Exists(OutputPath))
                 File.Delete(OutputPath);
@@ -242,7 +277,7 @@ async Task<bool> Handle()
 
         var newMediaInfo = await FFProbe.AnalyseAsync(OutputPath);
         if (ShouldEncode(newMediaInfo, true))
-            Logger.Error($"Warning, file analysis for {OutputPath} mark this file as non-encoded.");
+            ffconvert.IOManager.Error($"Warning, file analysis for {OutputPath} mark this file as non-encoded.");
 
         if (fiInput.DirectoryName == null)
             throw new Exception($"Safe lock: empty DirectoryName for {fiInput}.");
@@ -271,7 +306,7 @@ async Task<bool> Handle()
 
         File.Move(OutputPath, newInputPath);
         if (!File.Exists(newInputPath))
-            Logger.Error($"Move failed, cannot file any file at {newInputPath}.");
+            ffconvert.IOManager.Error($"Move failed, cannot file any file at {newInputPath}.");
 
         if (conf.ShouldDeleteEmptyDirectories
         && conf.ForcedDestinationDirectoryPath != null
@@ -280,7 +315,7 @@ async Task<bool> Handle()
         && !Directory.EnumerateFileSystemEntries(fiInput.DirectoryName).Any())
             Directory.Delete(fiInput.DirectoryName);
 
-        Logger.Information(Flavor.Ok, "Fichier remplacé avec succès", Flavor.Normal, $": {InputPath}.");
+        ffconvert.IOManager.Information(Flavor.Ok, "Fichier remplacé avec succès", Flavor.Normal, $": {InputPath}.");
         return true;
     }
 
@@ -293,48 +328,116 @@ async Task<bool> Handle()
 
 void PrintLogo()
 {
-    Logger.Information(
+    ffconvert.IOManager.Information(
         "#########################################");
-    Logger.Information("##                                     ##");
-    Logger.Information("##     =====      ", Flavor.Progress, "FFBOT", Flavor.Normal, "      =====     ##");
-    Logger.Information("##                                     ##");
-    Logger.Information("#########################################");
-    Logger.Information();
+    ffconvert.IOManager.Information("##                                     ##");
+    ffconvert.IOManager.Information("##     =====      ", Flavor.Progress, "FFBOT", Flavor.Normal, "      =====     ##");
+    ffconvert.IOManager.Information("##                                     ##");
+    ffconvert.IOManager.Information("#########################################");
+    ffconvert.IOManager.Information();
 }
 
 void PrintConfiguration()
 {
-    #pragma warning disable CS8604 // Existence possible d'un argument de référence null.
-    Logger.Information($"Working directory: ", Flavor.Important, conf.WorkingDirectoryPath);
-    Logger.Information($"Forced destination path : ", Flavor.Important, conf.ForcedDestinationDirectoryPath);
+#pragma warning disable CS8604 // Existence possible d'un argument de référence null.
+    ffconvert.IOManager.Information($"Working directory: ", Flavor.Important, conf.WorkingDirectoryPath);
+    ffconvert.IOManager.Information($"Forced destination path : ", Flavor.Important, conf.ForcedDestinationDirectoryPath);
 
-    Logger.Information($"Allowed inputs: ", Flavor.Important, string.Join(",", conf.AllowedInputs));
-    Logger.Information($"Output extension: ", Flavor.Important, conf.OutputExtension);
-    Logger.Information($"Targeted video codec: ", Flavor.Important, conf.TargetedVideoCodec);
+    ffconvert.IOManager.Information($"Allowed inputs: ", Flavor.Important, string.Join(",", conf.AllowedInputs));
+    ffconvert.IOManager.Information($"Output extension: ", Flavor.Important, conf.OutputExtension);
+    ffconvert.IOManager.Information($"Targeted video codec: ", Flavor.Important, conf.TargetedVideoCodec);
 
-    Logger.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomInputArguments);
-    Logger.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomOutputArguments);
+    ffconvert.IOManager.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomInputArguments);
+    ffconvert.IOManager.Information($"Base custom input arguments: ", Flavor.Important, conf.BaseCustomOutputArguments);
 
-    Logger.Information($"Should set aspect ratio to 1:1: ", conf.ShouldSetRatioToOneOne);
-    Logger.Information($"Should use smart audio encoding: ", conf.SmartAudioEncoding);
-    Logger.Information($"Should keep only one video stream: ", conf.KeepOnlyOneVideoStream);
-    Logger.Information($"Should remove old file: ", conf.ShouldRemoveOldFile);
-    Logger.Information($"Should send removed to bin: ", conf.ShouldSendRemovedToBin);
-    Logger.Information($"Should kill ffmpeg when exited: ", conf.ShouldKillFFMpegWhenExited);
-    Logger.Information($"Should delete empty directories: ", conf.ShouldDeleteEmptyDirectories);
-    Logger.Information($"Should delete temporary file at start: ", conf.ShouldDeleteTemporaryFile);
+    ffconvert.IOManager.Information($"Should set aspect ratio to 1:1: ", conf.ShouldSetRatioToOneOne);
+    ffconvert.IOManager.Information($"Should use smart audio encoding: ", conf.SmartAudioEncoding);
+    ffconvert.IOManager.Information($"Should keep only one video stream: ", conf.KeepOnlyOneVideoStream);
+    ffconvert.IOManager.Information($"Should remove old file: ", conf.ShouldRemoveOldFile);
+    ffconvert.IOManager.Information($"Should send removed to bin: ", conf.ShouldSendRemovedToBin);
+    ffconvert.IOManager.Information($"Should kill ffmpeg when exited: ", conf.ShouldKillFFMpegWhenExited);
+    ffconvert.IOManager.Information($"Should delete empty directories: ", conf.ShouldDeleteEmptyDirectories);
+    ffconvert.IOManager.Information($"Should delete temporary file at start: ", conf.ShouldDeleteTemporaryFile);
 
-    Logger.Information($"History max size: ", conf.MaxHistorySize);
-    Logger.Information($"Console buffer max size: ", conf.MaxConsoleBufferSize);
-    Logger.Information($"Console minimum verbosity: ", Flavor.Important, Logger.MinConsoleVerbosity.ToString());
+    ffconvert.IOManager.Information($"History max size: ", conf.MaxHistorySize);
+    ffconvert.IOManager.Information($"Console buffer max size: ", conf.MaxConsoleBufferSize);
+    ffconvert.IOManager.Information($"Console minimum verbosity: ", Flavor.Important, ffconvert.IOManager.MinConsoleVerbosity.ToString());
 
-    Logger.Information($"Idle time: ", WaitingTime);
-    Logger.Information($"Start time: ", StartActivityBound);
-    Logger.Information($"Stop time: ", StopActivityBound);
+    ffconvert.IOManager.Information($"Idle time: ", WaitingTime);
+    ffconvert.IOManager.Information($"Start time: ", StartActivityBound);
+    ffconvert.IOManager.Information($"Stop time: ", StopActivityBound);
 
-    Logger.Information();
+    ffconvert.IOManager.Information();
     #pragma warning restore CS8604 // Existence possible d'un argument de référence null.
+}
 
+void PrintInteractivity()
+{
+    ffconvert.IOManager.Information("Force awake: ", Flavor.Important, "F1");
+    ffconvert.IOManager.Information("Force sleep: ", Flavor.Important, "F2");
+    ffconvert.IOManager.Information("Restore state: ", Flavor.Important, "F3");
+
+    ffconvert.IOManager.Information("Schedule stop: ", Flavor.Important, "F10");
+    ffconvert.IOManager.Information("Unschedule stop: ", Flavor.Important, "F11");
+    ffconvert.IOManager.Information("Exit now: ", Flavor.Important, "F12");
+
+    IOManager.Information();
+}
+
+void SetupInteractivity()
+{
+    if (!conf.Interactive)
+        return;
+
+    IOManager.Callbacks.OnForceAwake = () =>
+    {
+        IOManager.Information("Forcing ", Flavor.Important, "awakening.");
+        lock(InteractivityMutex)
+            ForceActive = true;
+        return;
+    };
+
+    IOManager.Callbacks.OnForceSleep = () =>
+    {
+        IOManager.Information("Forcing ", Flavor.Important, "sleep.");
+        lock (InteractivityMutex)
+            ForceActive = false;
+        return;
+    };
+
+    IOManager.Callbacks.OnUnforceState = () =>
+    {
+        IOManager.Information("Remove any forced state.");
+        lock (InteractivityMutex)
+            ForceActive = null;
+        return;
+    };
+        
+    IOManager.Callbacks.OnScheduleStop = () =>
+    {
+        IOManager.Information("Scheduling exit at next idle time.");
+        lock (InteractivityMutex)
+            ScheduleStop = true;
+        return;
+    };
+
+    IOManager.Callbacks.OnUnscheduleStop = () =>
+    {
+        IOManager.Information("Unscheduling exit.");
+        lock (InteractivityMutex)
+            ScheduleStop = false;
+        return;
+    };
+
+    IOManager.Callbacks.OnQuit = () =>
+    {
+        IOManager.Information("Exiting now...");
+        Environment.Exit(0);
+        return;
+    };
+
+    IOManager.StartInteractivity();
+    PrintInteractivity();
 }
 
 void OnExited(object? sender, EventArgs e)
@@ -346,17 +449,18 @@ void OnExited(object? sender, EventArgs e)
 bool ActivateIfNeeded()
 {
     var now = DateTime.Now.TimeOfDay;
-    if (!Active
-        && StopActivityBound != null
-        && StartActivityBound != null
-        && ((StartActivityBound < StopActivityBound && now >= StartActivityBound && now < StopActivityBound)
-        || (StartActivityBound > StopActivityBound && now >= StartActivityBound || now < StopActivityBound))
+    lock (InteractivityMutex)
+        if (!Active
+            && StopActivityBound != null
+            && StartActivityBound != null
+            && ((StartActivityBound < StopActivityBound && now >= StartActivityBound && now < StopActivityBound)
+            || (StartActivityBound > StopActivityBound && now >= StartActivityBound || now < StopActivityBound))
 )
-    {
-        Logger.Debug("Leaving sleeping mode.");
-        Active = true;
-        return true;
-    }
+        {
+            ffconvert.IOManager.Debug("Leaving sleeping mode.");
+            Active = true;
+            return true;
+        }
 
     return false;
 }
@@ -364,16 +468,17 @@ bool ActivateIfNeeded()
 bool DisableIfNeeded()
 {
     var now = DateTime.Now.TimeOfDay;
-    if (Active
-    && StopActivityBound != null
-    && StartActivityBound != null
-    && ((StartActivityBound < StopActivityBound && now < StartActivityBound || now >= StopActivityBound)
-    || (StartActivityBound > StopActivityBound && now >= StopActivityBound && now < StartActivityBound)))
-    {
-        Logger.Debug("Entering in sleeping mode.");
-        Active = false;
-        return true;
-    }
+    lock (InteractivityMutex)
+        if (Active
+        && StopActivityBound != null
+        && StartActivityBound != null
+        && ((StartActivityBound < StopActivityBound && now < StartActivityBound || now >= StopActivityBound)
+        || (StartActivityBound > StopActivityBound && now >= StopActivityBound && now < StartActivityBound)))
+        {
+            ffconvert.IOManager.Debug("Entering in sleeping mode.");
+            Active = false;
+            return true;
+        }
 
     return false;
 }
@@ -392,20 +497,20 @@ bool ShouldEncode(FFMpegCore.IMediaAnalysis? media, bool verbose = false)
     // encode if more than 1 video stream
     if (conf.KeepOnlyOneVideoStream && media.VideoStreams.Count > 1)
     {
-        Logger.Debug($"Marked as non-encoded: found multiples video streams ({media.VideoStreams.Count}).");
+        ffconvert.IOManager.Debug($"Marked as non-encoded: found multiples video streams ({media.VideoStreams.Count}).");
         return true;
     }        
 
     // encode bad codec
     if (media.PrimaryVideoStream.CodecName != conf.TargetedVideoCodec)
     {
-        Logger.Debug($"Marked as non-encoded: bad video codec found ({media.PrimaryVideoStream.CodecName}).");
+        ffconvert.IOManager.Debug($"Marked as non-encoded: bad video codec found ({media.PrimaryVideoStream.CodecName}).");
         return true;
     }
 
     if (conf.ShouldSetRatioToOneOne && IsBadAspectRatio(media))
     {
-        Logger.Debug($"Marked as non-encoded: bad SAR found ({media.PrimaryVideoStream.SampleAspectRatio.Width}):{media.PrimaryVideoStream.SampleAspectRatio.Height}.");
+        ffconvert.IOManager.Debug($"Marked as non-encoded: bad SAR found ({media.PrimaryVideoStream.SampleAspectRatio.Width}):{media.PrimaryVideoStream.SampleAspectRatio.Height}.");
         return true;
     }
 
