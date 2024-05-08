@@ -69,7 +69,7 @@ namespace ffconvert
                         continue;
                     }
 
-                    Console.Write(arg.ToString());
+                    PrintFormated(arg);
                 }
 
                 Console.Write(Environment.NewLine);
@@ -104,7 +104,7 @@ namespace ffconvert
         public static ConsoleColor GetConsoleColorByFlavor(Flavor flavor)
         {
             if (flavor == Flavor.Important)
-                return ConsoleColor.White;
+                return ConsoleColor.Cyan;
 
             if (flavor == Flavor.Ok)
                 return ConsoleColor.Green;
@@ -122,6 +122,50 @@ namespace ffconvert
         {
             var color = GetConsoleColorByFlavor(flavor);
             Console.ForegroundColor = color;
+        }
+
+        private static void PrintFormated(object obj)
+        {
+            ConsoleColor background = Console.BackgroundColor;
+            ConsoleColor foreground = Console.ForegroundColor;
+
+            if (obj is null)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write("🚫 null");
+            }
+            else if (obj is string s)
+            {
+                Console.Write(s);
+            }
+            else if (obj is bool b)
+            {
+                if (b)
+                {
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.Write("✔️ true");
+                }                    
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write("❌ false");
+                }                    
+            }
+            else if(obj is TimeSpan dt)
+            {
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.Write(dt.ToString());
+            }
+            else if(Helper.IsNumericType(obj.GetType()))
+            {
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.Write(obj.ToString());
+            }
+            else
+                Console.Write(obj.ToString());
+
+            Console.BackgroundColor = background;
+            Console.ForegroundColor = foreground;
         }
     }
 }

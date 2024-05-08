@@ -1,8 +1,13 @@
 ﻿using ffconvert;
 using FFMpegCore;
+using System.Text;
+
+#region Boot
+
+//Configuration:
 
 Console.CursorVisible = false;
-PrintLogo();
+Console.OutputEncoding = Encoding.UTF8;
 
 HashSet<string> SkipBuffer = new();
 
@@ -18,7 +23,7 @@ bool ShouldSetRatioToOneOne = true;
 bool SmartAudioEncoding = true;
 bool KeepOnlyOneVideoStream = true;
 bool ShouldRemoveOldFile = true;
-bool ShouldSendRemovedToBin = true;
+bool ShouldSendRemovedToBin = false;
 bool ShouldKillFFMpegWhenExited = true;
 bool ShouldDeleteEmptyDirectories = true;
 bool ShouldDeleteTemporaryFile = true;
@@ -26,18 +31,69 @@ int MaxHistorySize = 100;
 int MaxConsoleBufferSize = 25000;
 Logger.MinConsoleVerbosity = Verbosity.Information;
 
-TimeSpan? StartActivityBound = TimeSpan.FromHours(13);
+TimeSpan WaitingTime = TimeSpan.FromSeconds(60);
+TimeSpan? StartActivityBound = TimeSpan.FromHours(23);
 TimeSpan? StopActivityBound = TimeSpan.FromHours(7);
 bool Active = true;
-TimeSpan WaitingTime = TimeSpan.FromSeconds(60);
-PrintConfiguration();
 
 Action CancelCurrentFFMPeg = () => { };
 AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnExited);
 
 string OutputPath = Path.Combine(WorkingDirectoryPath, "temporary" + "." + OutputExtension);
 
+// Main program:
+
+PrintLogo();
+PrintConfiguration();
 await Start();
+
+#endregion
+
+#region Main Logic
+
+async Task Start()
+{
+    if (ForcedDestinationDirectoryPath != null && !Directory.Exists(ForcedDestinationDirectoryPath))
+        Directory.CreateDirectory(ForcedDestinationDirectoryPath);
+
+    if (File.Exists(OutputPath))
+    {
+        if (!ShouldDeleteTemporaryFile)
+            throw new Exception($"Safe lock: Please stop other encoding or remove file {OutputPath}.+");
+
+        File.Delete(OutputPath);
+    }
+    DisableIfNeeded();
+
+    await FirstFrame();
+    while (true)
+        await ClassicFrame();
+}
+
+async Task FirstFrame()
+{
+    if (Active && !await Handle())
+    {
+        Logger.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{WorkingDirectoryPath}\"");
+        await Task.Delay(WaitingTime);
+    }
+    else if (!Active)
+        Logger.Information(Flavor.Important, "Waiting ", StartActivityBound, Flavor.Normal, $" for start...");
+}
+
+async Task ClassicFrame()
+{
+    if (DisableIfNeeded())
+    {
+        await Task.Delay(WaitingTime);
+        return;
+    }
+
+    ActivateIfNeeded();
+
+    if (Active && !await Handle())
+        await Task.Delay(WaitingTime);
+}
 
 //return true if convert, false otherwise
 async Task<bool> Handle()
@@ -51,12 +107,12 @@ async Task<bool> Handle()
     {
         string CustomInputsArgs = BaseCustomInputArguments;
         string CustomOutputArgs = BaseCustomOutputArguments;
-        
+
         if (SkipBuffer.Contains(InputPath))
             continue;
 
         FileInfo fiInput = new FileInfo(InputPath);
-        if(!fiInput.Exists) 
+        if (!fiInput.Exists)
         {
             SkipBuffer.Add(InputPath);
             continue;
@@ -67,7 +123,7 @@ async Task<bool> Handle()
         {
             mediaInfo = await FFProbe.AnalyseAsync(InputPath);
         }
-        catch(Exception e)
+        catch (Exception e)
         {
             SkipBuffer.Add(InputPath);
             Logger.Error($"Cannot analyse {InputPath}: {e}");
@@ -76,7 +132,7 @@ async Task<bool> Handle()
         var totalTime = mediaInfo.Duration;
 
         //Skip already converted files
-        if(!ShouldEncode(mediaInfo))
+        if (!ShouldEncode(mediaInfo))
         {
             SkipBuffer.Add(InputPath);
             continue;
@@ -86,8 +142,8 @@ async Task<bool> Handle()
             throw new NotImplementedException();
         else
             CustomOutputArgs += " -map 0:v:0 -c:v libvpx-vp9";
-        
-        if(ShouldSetRatioToOneOne && IsBadAspectRatio(mediaInfo))
+
+        if (ShouldSetRatioToOneOne && IsBadAspectRatio(mediaInfo))
         {
             int w = (int)((double)mediaInfo.PrimaryVideoStream.Width * (double)(mediaInfo.PrimaryVideoStream.SampleAspectRatio.Width) / (double)(mediaInfo.PrimaryVideoStream.SampleAspectRatio.Height));
             int h = mediaInfo.PrimaryVideoStream.Height;
@@ -99,16 +155,16 @@ async Task<bool> Handle()
         if (!SmartAudioEncoding)
             CustomOutputArgs += " -c:a libvorbis";
         else
-            for(int i = 0; i<mediaInfo.AudioStreams.Count; i++)
+            for (int i = 0; i < mediaInfo.AudioStreams.Count; i++)
             {
                 var audioStream = mediaInfo.AudioStreams[i];
-                if(audioStream.ChannelLayout.ToLower().EndsWith("(side)"))
+                if (audioStream.ChannelLayout.ToLower().EndsWith("(side)"))
                     CustomOutputArgs += $" -c:a:{i} libvorbis";
                 else
                     CustomOutputArgs += $" -c:a:{i} libopus";
             }
 
-        if(mediaInfo.SubtitleStreams.Count > 0)
+        if (mediaInfo.SubtitleStreams.Count > 0)
         {
             bool hasTextSubtitle = false;
             for (int i = 0; i < mediaInfo.SubtitleStreams.Count; i++)
@@ -141,7 +197,7 @@ async Task<bool> Handle()
             .CancellableThrough(out CancelCurrentFFMPeg)
             .NotifyOnError((string message) =>
             {
-                if(ConsoleBuffer.Length < MaxConsoleBufferSize)
+                if (ConsoleBuffer.Length < MaxConsoleBufferSize)
                     ConsoleBuffer += message;
             })
             .NotifyOnOutput((string message) =>
@@ -149,14 +205,14 @@ async Task<bool> Handle()
                 if (ConsoleBuffer.Length < MaxConsoleBufferSize)
                     ConsoleBuffer += message;
             });
-            
 
-        
+
+
         Logger.Debug($"Executed command: {ffmpegArgs.Arguments}");
 
         string relativeInputPath = Path.GetRelativePath(WorkingDirectoryPath, InputPath);
         string? InputDirRelative = null;
-        if(fiInput.DirectoryName != null)
+        if (fiInput.DirectoryName != null)
             InputDirRelative = Path.GetRelativePath(WorkingDirectoryPath, fiInput.DirectoryName);
 
         var progress = new ProgressBar(suffix: $" {relativeInputPath}");
@@ -168,7 +224,7 @@ async Task<bool> Handle()
             while (History.Count > MaxHistorySize && History.Count > 0)
                 History.RemoveAt(0);
             TimeSpan? remainRealTime = null;
-            if(History.Count > 5)
+            if (History.Count > 5)
             {
                 var firstHistoryEntry = History.First();
                 var elapsedRealTimeSinceFirstEntry = DateTime.Now - firstHistoryEntry.Key;
@@ -181,7 +237,7 @@ async Task<bool> Handle()
 
 
             progress.Report(relativeProgress
-                , remainRealTime == null 
+                , remainRealTime == null
                     ? $" {relativeInputPath}"
                     : $" {relativeInputPath}, {remainRealTime.Value.ToReadableString()}");
         });
@@ -195,7 +251,7 @@ async Task<bool> Handle()
         {
             Logger.Error($"Encoding failed for {InputPath}.");
             SkipBuffer.Add(InputPath);
-            if(File.Exists(OutputPath))
+            if (File.Exists(OutputPath))
                 File.Delete(OutputPath);
             return true;
         }
@@ -215,20 +271,20 @@ async Task<bool> Handle()
             newInputPath = Path.Combine(fiInput.DirectoryName, newInputFileName);
 
         FileInfo newInputFi = new(newInputPath);
-        if(newInputFi.DirectoryName != null && !Directory.Exists(newInputFi.DirectoryName))
+        if (newInputFi.DirectoryName != null && !Directory.Exists(newInputFi.DirectoryName))
             Directory.CreateDirectory(newInputFi.DirectoryName);
 
-        if(ShouldRemoveOldFile)
+        if (ShouldRemoveOldFile)
         {
-                /*Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(
-                    InputPath,
-                    Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
-                    ShouldSendRemovedToBin 
-                        ? Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin 
-                        : Microsoft.VisualBasic.FileIO.RecycleOption.DeletePermanently);*/
+            /*Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(
+                InputPath,
+                Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                ShouldSendRemovedToBin 
+                    ? Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin 
+                    : Microsoft.VisualBasic.FileIO.RecycleOption.DeletePermanently);*/
             File.Delete(InputPath);
         }
-        
+
         File.Move(OutputPath, newInputPath);
         if (!File.Exists(newInputPath))
             Logger.Error($"Move failed, cannot file any file at {newInputPath}.");
@@ -246,6 +302,94 @@ async Task<bool> Handle()
 
     return false;
 }
+
+#endregion
+
+#region Additional logic
+
+void PrintLogo()
+{
+    Logger.Information(
+        "#########################################");
+    Logger.Information("##                                     ##");
+    Logger.Information("##     =====      ", Flavor.Progress, "FFBOT", Flavor.Normal, "      =====     ##");
+    Logger.Information("##                                     ##");
+    Logger.Information("#########################################");
+    Logger.Information();
+}
+
+void PrintConfiguration()
+{
+    Logger.Information($"Working directory: ", Flavor.Important, WorkingDirectoryPath);
+    Logger.Information($"Forced destination path : ", Flavor.Important, ForcedDestinationDirectoryPath);
+
+    Logger.Information($"Allowed inputs: ", Flavor.Important, string.Join(",", AllowedInputs));
+    Logger.Information($"Output extension: ", Flavor.Important, OutputExtension);
+    Logger.Information($"Targeted video codec: ", Flavor.Important, TargetedVideoCodec);
+
+    Logger.Information($"Base custom input arguments: ", Flavor.Important, BaseCustomInputArguments);
+    Logger.Information($"Base custom input arguments: ", Flavor.Important, BaseCustomOutputArguments);
+
+    Logger.Information($"Should set aspect ratio to 1:1: ", ShouldSetRatioToOneOne);
+    Logger.Information($"Should use smart audio encoding: ", SmartAudioEncoding);
+    Logger.Information($"Should keep only one video stream: ", KeepOnlyOneVideoStream);
+    Logger.Information($"Should remove old file: ", ShouldRemoveOldFile);
+    Logger.Information($"Should send removed to bin: ", ShouldSendRemovedToBin);
+    Logger.Information($"Should kill ffmpeg when exited: ", ShouldKillFFMpegWhenExited);
+    Logger.Information($"Should delete empty directories: ", ShouldDeleteEmptyDirectories);
+    Logger.Information($"Should delete temporary file at start: ", ShouldDeleteTemporaryFile);
+
+    Logger.Information($"History max size: ", MaxHistorySize);
+    Logger.Information($"Console buffer max size: ", MaxConsoleBufferSize);
+    Logger.Information($"Console minimum verbosity: ", Flavor.Important, Logger.MinConsoleVerbosity.ToString());
+
+    Logger.Information($"Idle time: ", WaitingTime);
+    Logger.Information($"Start time: ", StartActivityBound);
+    Logger.Information($"Stop time: ", StopActivityBound);
+
+    Logger.Information();
+}
+
+void OnExited(object? sender, EventArgs e)
+{
+    if (ShouldKillFFMpegWhenExited)
+        CancelCurrentFFMPeg();
+}
+
+bool ActivateIfNeeded()
+{
+    var now = DateTime.Now.TimeOfDay;
+    if (StopActivityBound != null
+        && StartActivityBound != null
+        && (StartActivityBound < StopActivityBound && now >= StartActivityBound && now < StopActivityBound)
+        || (StartActivityBound > StopActivityBound && now >= StartActivityBound || now < StopActivityBound)
+)
+    {
+        Logger.Debug("Leaving sleeping mode.");
+        Active = true;
+        return true;
+    }
+
+    return false;
+}
+
+bool DisableIfNeeded()
+{
+    var now = DateTime.Now.TimeOfDay;
+    if (Active
+    && StopActivityBound != null
+    && StartActivityBound != null
+    && (StartActivityBound < StopActivityBound && now < StartActivityBound || now >= StopActivityBound)
+    || (StartActivityBound > StopActivityBound && now >= StopActivityBound && now < StartActivityBound))
+    {
+        Logger.Debug("Entering in sleeping mode.");
+        Active = false;
+        return true;
+    }
+
+    return false;
+}
+
 
 bool ShouldEncode(FFMpegCore.IMediaAnalysis? media, bool verbose = false)
 {
@@ -295,103 +439,4 @@ bool IsBadAspectRatio(FFMpegCore.IMediaAnalysis media)
 
     return false;
 }
-
-void OnExited(object? sender, EventArgs e)
-{
-    if (ShouldKillFFMpegWhenExited)
-        CancelCurrentFFMPeg();
-}
-
-void PrintLogo()
-{
-    Logger.Information("#########################################");
-    Logger.Information("##                                     ##");
-    Logger.Information("##     =====      ", Flavor.Progress, "FFBOT", Flavor.Normal, "      =====     ##");
-    Logger.Information("##                                     ##");
-    Logger.Information("#########################################");
-    Logger.Information();
-}
-
-void PrintConfiguration()
-{
-    Logger.Information($"Working directory: {WorkingDirectoryPath}");
-    if (ForcedDestinationDirectoryPath != null)
-        Logger.Information($"Forced a destination path : {ForcedDestinationDirectoryPath}");
-
-    Logger.Information($"Allowed inputs: {string.Join(",", AllowedInputs)}");
-    Logger.Information($"Output extension: {OutputExtension}");
-    Logger.Information($"Targeted video codec: {TargetedVideoCodec}");
-
-    Logger.Information($"Base custom input arguments: {BaseCustomInputArguments}");
-    Logger.Information($"Base custom input arguments: {BaseCustomOutputArguments}");
-    Logger.Information($"Should set aspect ratio to 1:1: {ShouldSetRatioToOneOne}");
-    Logger.Information($"Should use smart audio encoding: {SmartAudioEncoding}");
-    Logger.Information($"Should keep only one video stream: {KeepOnlyOneVideoStream}");
-
-    Logger.Information($"Idle time: {WaitingTime}");
-
-    Logger.Information();
-}
-
-async Task Start()
-{
-    if (ForcedDestinationDirectoryPath != null && !Directory.Exists(ForcedDestinationDirectoryPath))
-        Directory.CreateDirectory(ForcedDestinationDirectoryPath);
-
-    if (File.Exists(OutputPath))
-    {
-        if (!ShouldDeleteTemporaryFile)
-            throw new Exception($"Safe lock: Please stop other encoding or remove file {OutputPath}.+");
-
-        File.Delete(OutputPath);
-    }
-
-    if (Active
-    && StopActivityBound != null
-    && StartActivityBound != null
-    && DateTime.Now.TimeOfDay >= StopActivityBound
-    && DateTime.Now.TimeOfDay < StartActivityBound)
-        Active = false;
-
-    if (Active && !await Handle())
-    {
-        Logger.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{WorkingDirectoryPath}\"");
-        await Task.Delay(WaitingTime);
-    }
-    else if (!Active)
-        Logger.Information(Flavor.Important, "Waiting", Flavor.Normal, $" {StartActivityBound} for start...");
-
-    while (true)
-    {
-        if (!Active)
-        {
-            if (StopActivityBound != null
-            && StartActivityBound != null
-            && DateTime.Now.TimeOfDay >= StartActivityBound
-            && DateTime.Now.TimeOfDay < StopActivityBound)
-            {
-                Active = true;
-                Logger.Debug("Leaving sleeping mode.");
-                continue;
-            }
-            await Task.Delay(WaitingTime);
-            continue;
-        }
-
-        if (Active)
-        {
-            if (StopActivityBound != null
-            && StartActivityBound != null
-            && DateTime.Now.TimeOfDay >= StopActivityBound
-            && DateTime.Now.TimeOfDay < StartActivityBound)
-            {
-                Active = false;
-                Logger.Debug("Entering in sleeping mode.");
-                continue;
-            }
-
-            if (!await Handle())
-                await Task.Delay(WaitingTime);
-        }
-    }
-}
+#endregion
