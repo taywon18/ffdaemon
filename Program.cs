@@ -69,7 +69,6 @@ async Task Start()
 
 async Task FirstFrame()
 {
-    
     bool isActive;
 
     lock (InteractivityMutex)
@@ -237,7 +236,7 @@ async Task<bool> Handle()
         if (fiInput.DirectoryName != null)
             InputDirRelative = Path.GetRelativePath(conf.WorkingDirectoryPath, fiInput.DirectoryName);
 
-        var progress = new ProgressBar(suffix: $" {relativeInputPath}");
+        IOManager.SetupProgressBar("", 0, relativeInputPath);
 
         List<KeyValuePair<DateTime, TimeSpan>> History = new();
         ffmpegArgs = ffmpegArgs.NotifyOnProgress((TimeSpan current) =>
@@ -257,16 +256,14 @@ async Task<bool> Handle()
             }
             var relativeProgress = current / totalTime;
 
-
-            progress.Report(relativeProgress
-                , remainRealTime == null
+            IOManager.SetupProgressBar("", (float)relativeProgress, remainRealTime == null
                     ? $" {relativeInputPath}"
                     : $" {relativeInputPath}, {remainRealTime.Value.ToReadableString()}");
         });
 
         bool worked = await ffmpegArgs.ProcessAsynchronously(false);
         CancelCurrentFFMPeg = () => { };
-        progress.Dispose();
+        IOManager.IsProgressBarActive = false;
 
         SkipBuffer.Add(InputPath);
         if (!worked)
@@ -457,7 +454,10 @@ bool ActivateIfNeeded()
             && StopActivityBound != null
             && StartActivityBound != null
             && ((StartActivityBound < StopActivityBound && now >= StartActivityBound && now < StopActivityBound)
-            || (StartActivityBound > StopActivityBound && now >= StartActivityBound || now < StopActivityBound))
+            || (StartActivityBound > StopActivityBound && 
+            (
+                now >= StartActivityBound || now < StopActivityBound
+            )))
 )
         {
             ffdeamon.IOManager.Debug("Leaving sleeping mode.");
@@ -475,7 +475,9 @@ bool DisableIfNeeded()
         if (Active
         && StopActivityBound != null
         && StartActivityBound != null
-        && ((StartActivityBound < StopActivityBound && now < StartActivityBound || now >= StopActivityBound)
+        && (
+            (StartActivityBound < StopActivityBound && (now < StartActivityBound || now >= StopActivityBound)
+        )
         || (StartActivityBound > StopActivityBound && now >= StopActivityBound && now < StartActivityBound)))
         {
             ffdeamon.IOManager.Debug("Entering in sleeping mode.");
