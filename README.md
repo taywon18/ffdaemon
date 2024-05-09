@@ -51,4 +51,3 @@ FFDeamon is a lightweight C# daemon designed to automate video encoding in a des
 | Smart Audio Encoding | `--smart-audio` | `--enable-smart-audio` | Enable smart audio encoding based on input characteristics (optional) | `true` |
 | Keep One Video Stream | `--keep-one-video` | `--keep-single-video-stream` | Keep only one video stream during encoding (optional) | `true` |
 | Remove Old Files | `--remove-old-file` | `--delete-old-encoded-files` | Remove old encoded files corresponding to newly encoded ones (optional) | `true` |
-| Send Removed Files to Bin | N/A
