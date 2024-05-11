@@ -36,9 +36,11 @@ FFDeamon is a lightweight C# daemon designed to automate video encoding in a des
 
 **Available Options**
 
+Absolutely, here's the updated table incorporating the new information from the provided C# code snippet:
+
 | Option | Short Flag | Long Flag | Description | Default |
 |---|---|---|---|---|
-| Configuration File | `-c` | `--config` | Path to a configuration file (optional) | N/A |
+| Configuration File | `-c` | `--config` | Set configuration file path (optional) | N/A |
 | Interactive Mode | `-i` | `--interactive` | Enable real-time encoding progress feedback (default) | `true` |
 | Working Directory | `-d` | `--directory` | Force the working directory where FFDeamon monitors for videos | Current directory |
 | Output Directory | `-o` | `--output` | Force the directory where encoded videos are saved | `../Encoded` |
@@ -51,3 +53,13 @@ FFDeamon is a lightweight C# daemon designed to automate video encoding in a des
 | Smart Audio Encoding | `--smart-audio` | `--enable-smart-audio` | Enable smart audio encoding based on input characteristics (optional) | `true` |
 | Keep One Video Stream | `--keep-one-video` | `--keep-single-video-stream` | Keep only one video stream during encoding (optional) | `true` |
 | Remove Old Files | `--remove-old-file` | `--delete-old-encoded-files` | Remove old encoded files corresponding to newly encoded ones (optional) | `true` |
+| Kill ffmpeg | `--kill-ffmpeg` | `--kill-ffmpeg-when-exited` | Kill ffmpeg process when FFDeamon exits | `true` |
+| Delete Empty Directories | `--delete-empty-directories` | `--delete-empty-directories` | Delete empty directories after processing | `true` |
+| Delete Temporary File | `--delete-temporary-file` | `--delete-temporary-file` | Delete temporary files created during processing | `true` |
+| Max History Size | `-h` | `--max-history-size` | Set max history size (number of processed files to remember) | 100 |
+| Max ffmpeg Buffer Size | `-b` | `--max-ffmpeg-buffer` | Set max ffmpeg output buffer size | 25000 |
+| Wait Time Between Scans | `-w` | `--wait-time` | Set time to wait between scans for new videos | 60 seconds |
+| Start Activity Time | `--start-at` | `--start-at` | Set a specific time to start encoding activity (optional) | null |
+| Stop Activity Time | `--stop-at` | `--stop-at` | Set a specific time to stop encoding activity (optional) | null |
+| After Start Command | `--after-start` | `--after-start` |  Execute a custom command after FFDeamon starts (optional) | null |
+| After Stop Command | `--after-stop` | `--after-stop` | Execute a custom command after FFDeamon stops (optional) | null |
