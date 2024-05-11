@@ -2,6 +2,7 @@
   "profiles": {
     "ffconvert": {
       "commandName": "Project",
+      "commandLineArgs": "--start-at 23:30:00 --stop-at 07:00:30",
       "workingDirectory": "C:\\Users\\Taywon\\Videos\\Partage\\AutoEncoder"
     }
   }

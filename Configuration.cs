@@ -51,6 +51,18 @@ public class Configuration
     [Option('b', "max-ffmpeg-buffer", Required = false, HelpText = "Set max ffmpeg output buffer size")]
     public int MaxConsoleBufferSize { get; set; } = 25000;
 
+    [Option('w', "wait-time", Required = false, HelpText = "Set time to wait between scans")]
+    public TimeSpan WaitingTime { get; set; } = TimeSpan.FromSeconds(60);
+    [Option("start-at", Required = false, HelpText = "Set time to start (= exit sleeping mode)")]
+    public TimeSpan? StartActivityBound { get; set; } = null;
+    [Option("stop-at", Required = false, HelpText = "Set time to stop (= enter in sleeping mode)")]
+    public TimeSpan? StopActivityBound { get; set; } = null;
+    [Option("after-start", Required = false, HelpText = "Execute this command after each start")]
+    public string? ExecuteAfterStart { get; set; } = null;
+    [Option("after-stop", Required = false, HelpText = "Execute this command after each start")]
+    public string? ExecuteAfterStop { get; set; } = null;
+
+
     public void LoadFromConfigFile()
     {
         if(String.IsNullOrEmpty(Config))

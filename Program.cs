@@ -14,10 +14,6 @@ HashSet<string> SkipBuffer = new();
 
 Configuration conf = new Configuration();
 
-TimeSpan WaitingTime = TimeSpan.FromSeconds(60);
-TimeSpan? StartActivityBound = TimeSpan.FromHours(23);
-TimeSpan? StopActivityBound = TimeSpan.FromHours(7);
-
 object InteractivityMutex = new object();
 bool Active = true;
 bool? ForceActive = null;
@@ -77,17 +73,17 @@ async Task FirstFrame()
     if (isActive && !await Handle())
     {
         ffdeamon.IOManager.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{conf.WorkingDirectoryPath}\"");
-        await Task.Delay(WaitingTime);
+        await Task.Delay(conf.WaitingTime);
     }
     else if (!isActive)
-        ffdeamon.IOManager.Information(Flavor.Important, "Waiting ", StartActivityBound, Flavor.Normal, $" for start...");
+        ffdeamon.IOManager.Information(Flavor.Important, "Waiting ", conf.StartActivityBound, Flavor.Normal, $" for start...");
 }
 
 async Task ClassicFrame()
 {
     if (DisableIfNeeded())
     {
-        await Task.Delay(WaitingTime);
+        await Task.Delay(conf.WaitingTime);
         return;
     }
 
@@ -105,14 +101,14 @@ async Task ClassicFrame()
     if (isForcedActivity == null)
     {
         if(isActive && !await Handle())
-            await Task.Delay(WaitingTime);
+            await Task.Delay(conf.WaitingTime);
         else if(!isActive)
-            await Task.Delay(WaitingTime);
+            await Task.Delay(conf.WaitingTime);
     }
     else if(isForcedActivity == false)
-        await Task.Delay(WaitingTime);
+        await Task.Delay(conf.WaitingTime);
     else if (isForcedActivity == true && !await Handle())
-        await Task.Delay(WaitingTime);
+        await Task.Delay(conf.WaitingTime);
 
 }
 
@@ -122,6 +118,11 @@ async Task<bool> Handle()
     var rawCandidates = Directory.GetFiles(conf.WorkingDirectoryPath, "*", searchOption: SearchOption.AllDirectories);
     var candidates = rawCandidates
         .Where(file => conf.AllowedInputs.Any(file.ToLower().EndsWith))
+        .OrderBy(x =>
+        {
+            FileInfo fi = new(x);
+            return fi.LastWriteTime;
+        })
         .ToList();
 
     foreach (var InputPath in candidates)
@@ -194,7 +195,7 @@ async Task<bool> Handle()
             {
                 var subtitleStream = mediaInfo.SubtitleStreams[i];
                 CustomOutputArgs += $" -map 0:s:{i}";
-                if (subtitleStream.CodecName == "dvb_teletext" || subtitleStream.CodecName == "ass")
+                if (subtitleStream.CodecName == "dvb_teletext" || subtitleStream.CodecName == "ass" || subtitleStream.CodecName == "mov_text")
                 {
                     hasTextSubtitle |= true;
                     CustomOutputArgs += $" -c:s:{i} webvtt";
@@ -363,9 +364,9 @@ void PrintConfiguration()
     ffdeamon.IOManager.Information($"Console buffer max size: ", conf.MaxConsoleBufferSize);
     ffdeamon.IOManager.Information($"Console minimum verbosity: ", Flavor.Important, ffdeamon.IOManager.MinConsoleVerbosity.ToString());
 
-    ffdeamon.IOManager.Information($"Idle time: ", WaitingTime);
-    ffdeamon.IOManager.Information($"Start time: ", StartActivityBound);
-    ffdeamon.IOManager.Information($"Stop time: ", StopActivityBound);
+    ffdeamon.IOManager.Information($"Idle time: ", conf.WaitingTime);
+    ffdeamon.IOManager.Information($"Start time: ", conf.StartActivityBound);
+    ffdeamon.IOManager.Information($"Stop time: ", conf.StopActivityBound);
 
     ffdeamon.IOManager.Information();
     #pragma warning restore CS8604 // Existence possible d'un argument de référence null.
@@ -451,17 +452,19 @@ bool ActivateIfNeeded()
     var now = DateTime.Now.TimeOfDay;
     lock (InteractivityMutex)
         if (!Active
-            && StopActivityBound != null
-            && StartActivityBound != null
-            && ((StartActivityBound < StopActivityBound && now >= StartActivityBound && now < StopActivityBound)
-            || (StartActivityBound > StopActivityBound && 
+            && conf.StopActivityBound != null
+            && conf.StartActivityBound != null
+            && ((conf.StartActivityBound < conf.StopActivityBound && now >= conf.StartActivityBound && now < conf.StopActivityBound)
+            || (conf.StartActivityBound > conf.StopActivityBound && 
             (
-                now >= StartActivityBound || now < StopActivityBound
+                now >= conf.StartActivityBound || now < conf.StopActivityBound
             )))
 )
         {
             ffdeamon.IOManager.Debug("Leaving sleeping mode.");
             Active = true;
+            if (conf.ExecuteAfterStart is not null)
+                System.Diagnostics.Process.Start(conf.ExecuteAfterStart);
             return true;
         }
 
@@ -473,15 +476,17 @@ bool DisableIfNeeded()
     var now = DateTime.Now.TimeOfDay;
     lock (InteractivityMutex)
         if (Active
-        && StopActivityBound != null
-        && StartActivityBound != null
+        && conf.StopActivityBound != null
+        && conf.StartActivityBound != null
         && (
-            (StartActivityBound < StopActivityBound && (now < StartActivityBound || now >= StopActivityBound)
+            (conf.StartActivityBound < conf.StopActivityBound && (now < conf.StartActivityBound || now >= conf.StopActivityBound)
         )
-        || (StartActivityBound > StopActivityBound && now >= StopActivityBound && now < StartActivityBound)))
+        || (conf.StartActivityBound > conf.StopActivityBound && now >= conf.StopActivityBound && now < conf.StartActivityBound)))
         {
             ffdeamon.IOManager.Debug("Entering in sleeping mode.");
             Active = false;
+            if(conf.ExecuteAfterStop is not null)
+                System.Diagnostics.Process.Start(conf.ExecuteAfterStop);
             return true;
         }
 
