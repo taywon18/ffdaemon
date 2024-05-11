@@ -31,7 +31,7 @@ FFDeamon is a lightweight C# daemon designed to automate video encoding in a des
 2. Run the following command, providing desired options (replace `<directory>` with the path to your video directory):
 
    ```bash
-   ffdeamon -d <directory> [other options]
+   ffdaemon -d <directory> [other options]
    ```
 
 **Available Options**
