@@ -2,7 +2,7 @@
 using System.Text;
 using static System.Net.Mime.MediaTypeNames;
 
-namespace ffdeamon
+namespace FFDaemon
 {        
     public enum Verbosity
     {
