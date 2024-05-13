@@ -72,7 +72,7 @@ async Task FirstFrame()
 
     if (isActive && !await Handle())
     {
-        FFDaemon.IOManager.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in \"{conf.WorkingDirectoryPath}\"");
+        FFDaemon.IOManager.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in ", conf.WorkingDirectoryPath);
         await Task.Delay(conf.WaitingTime);
     }
     else if (!isActive)
@@ -182,7 +182,7 @@ async Task<bool> Handle()
             for (int i = 0; i < mediaInfo.AudioStreams.Count; i++)
             {
                 var audioStream = mediaInfo.AudioStreams[i];
-                if (audioStream.ChannelLayout.ToLower().EndsWith("(side)"))
+                if ((audioStream.ChannelLayout ?? "").ToLower().EndsWith("(side)"))
                     CustomOutputArgs += $" -c:a:{i} libvorbis";
                 else
                     CustomOutputArgs += $" -c:a:{i} libopus";
