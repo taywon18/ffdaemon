@@ -7,6 +7,8 @@ using System.Text;
 /// <summary>
 /// An ASCII progress bar
 /// </summary>
+
+[Obsolete]
 public class ProgressBar : IDisposable, IProgress<double>
 {
     public string Prefix = string.Empty;
