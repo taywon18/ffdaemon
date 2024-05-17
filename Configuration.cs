@@ -16,6 +16,8 @@ public class Configuration
     public string WorkingDirectoryPath { get; set; } = Environment.CurrentDirectory;
     [Option('o', "output", Required = false, HelpText = "Force output directory")]
     public string? ForcedDestinationDirectoryPath { get; set; } = "../Encoded";
+    [Option('t', "temporary", Required = false, HelpText = "Force temporary directory")]
+    public string? TemporaryDirectoryPath { get; set; } = ".ffdeamon";
 
 
     public string[] AllowedInputs { get; set; } = new[] { ".mkv", ".avi", ".vp9", ".ts", ".mp4", ".webm" };
