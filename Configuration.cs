@@ -64,6 +64,9 @@ public class Configuration
     [Option("after-stop", Required = false, HelpText = "Execute this command after each start")]
     public string? ExecuteAfterStop { get; set; } = null;
 
+    [Option('n', "instance-number", Required = false, HelpText = "Set the number of concurrent ffmpeg processes")]
+    public int InstanceCount { get; set; } = 1;
+
 
     public void LoadFromConfigFile()
     {
@@ -121,5 +124,41 @@ public class Configuration
             var v = p.GetValue(other);
             p.SetValue(this, v);
         }
+    }
+
+    public void Print()
+    {
+#pragma warning disable CS8604 // Existence possible d'un argument de référence null.
+        FFDaemon.IOManager.Information($"Working directory: ", Flavor.Important, WorkingDirectoryPath);
+        FFDaemon.IOManager.Information($"Forced destination path : ", Flavor.Important, ForcedDestinationDirectoryPath);
+
+        FFDaemon.IOManager.Information($"Allowed inputs: ", Flavor.Important, string.Join(",", AllowedInputs));
+        FFDaemon.IOManager.Information($"Output extension: ", Flavor.Important, OutputExtension);
+        FFDaemon.IOManager.Information($"Targeted video codec: ", Flavor.Important, TargetedVideoCodec);
+
+        FFDaemon.IOManager.Information($"Base custom input arguments: ", Flavor.Important, BaseCustomInputArguments);
+        FFDaemon.IOManager.Information($"Base custom input arguments: ", Flavor.Important, BaseCustomOutputArguments);
+
+        FFDaemon.IOManager.Information($"Should set aspect ratio to 1:1: ", ShouldSetRatioToOneOne);
+        FFDaemon.IOManager.Information($"Should use smart audio encoding: ", SmartAudioEncoding);
+        FFDaemon.IOManager.Information($"Should keep only one video stream: ", KeepOnlyOneVideoStream);
+        FFDaemon.IOManager.Information($"Should remove old file: ", ShouldRemoveOldFile);
+        FFDaemon.IOManager.Information($"Should send removed to bin: ", ShouldSendRemovedToBin);
+        FFDaemon.IOManager.Information($"Should kill ffmpeg when exited: ", ShouldKillFFMpegWhenExited);
+        FFDaemon.IOManager.Information($"Should delete empty directories: ", ShouldDeleteEmptyDirectories);
+        FFDaemon.IOManager.Information($"Should delete temporary file at start: ", ShouldDeleteTemporaryFile);
+
+        FFDaemon.IOManager.Information($"History max size: ", MaxHistorySize);
+        FFDaemon.IOManager.Information($"Console buffer max size: ", MaxConsoleBufferSize);
+        FFDaemon.IOManager.Information($"Console minimum verbosity: ", Flavor.Important, FFDaemon.IOManager.MinConsoleVerbosity.ToString());
+
+        FFDaemon.IOManager.Information($"Max concurrent FFMPEG instance count: ", InstanceCount);
+
+        FFDaemon.IOManager.Information($"Idle time: ", WaitingTime);
+        FFDaemon.IOManager.Information($"Start time: ", StartActivityBound);
+        FFDaemon.IOManager.Information($"Stop time: ", StopActivityBound);
+
+        FFDaemon.IOManager.Information();
+#pragma warning restore CS8604 // Existence possible d'un argument de référence null.
     }
 }

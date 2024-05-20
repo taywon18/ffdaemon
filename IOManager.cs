@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using FFDeamon;
+using System.Drawing;
 using System.Text;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -41,50 +42,9 @@ namespace FFDaemon
 
         public static Verbosity MinConsoleVerbosity = Verbosity.Debug;
 
-        private static bool _IsProgressBarActive = false;
-        private static string _ProgressBarPrefix = "";
-        private static string _ProgressBarSuffix = "";
-        private static float _ProgressBarValue = 0.0f;
-        
+        private static List<ProgressBar> _ProgressBars = new();
         private static Timer? ProgressBarTimer = null;
-
-        private static string ProgressText = "";
-        public static bool IsProgressBarActive
-        {
-            get 
-            {
-                lock (Mutex) 
-                {
-                    return _IsProgressBarActive; 
-                } 
-            }
-            set 
-            {
-                lock (Mutex)
-                {
-                    if (ProgressBarTimer == null)
-                    {
-                        ProgressBarTimer = new Timer(TimerHandler);
-                        ResetTimer();
-                    }
-
-                    if (_IsProgressBarActive && !value)
-                        EraseProgressBar();
-
-                    if (!_IsProgressBarActive && value)
-                    {
-                        RefreshProgressText();
-                        DrawProgressBar();
-                    }                        
-
-                    _IsProgressBarActive = value;
-                }
-            }
-        }
-
-        private static int animationIndex = 0;
-        private const int blockCount = 10;
-        private const string animation = @"|/―\";
+        private static int DrawnProgressBar = 0;
         private static readonly TimeSpan animationInterval = TimeSpan.FromSeconds(1.0 / 8);
 
 
@@ -116,6 +76,8 @@ namespace FFDaemon
 
             lock (Mutex)
             {
+                EraseAllProgressBar();
+
                 SetConsoleColorByVerbosity(verbosity);
 
                 foreach (object arg in arguments)
@@ -133,14 +95,10 @@ namespace FFDaemon
                     PrintFormated(arg);
                 }
 
-                if (_IsProgressBarActive)
-                    EraseProgressBar();
-
                 Console.Write(Environment.NewLine);
                 Console.ResetColor();
 
-                if (_IsProgressBarActive)
-                    DrawProgressBar();
+                DrawAllProgressBar();
             }
         }
 
@@ -280,30 +238,39 @@ namespace FFDaemon
             }).ConfigureAwait(false);
         }
 
+        public static void RegisterProgressBar(ProgressBar bar)
+        {
+            lock (Mutex)
+            {
+                _ProgressBars.Add(bar);
+
+                if (ProgressBarTimer == null)
+                {
+                    ProgressBarTimer = new Timer(TimerHandler);
+                    ResetTimer();
+                }
+            }
+        }
+
+        public static void UnregisterProgressBar(ProgressBar bar)
+        {
+            lock (Mutex)
+            {
+                _ProgressBars.Remove(bar);
+            }
+        }
+
         private static void TimerHandler(object? state)
         {
             lock (Mutex)
             {
-                if (_IsProgressBarActive)
-                {
-                    RefreshProgressText();
-                    DrawProgressBar();
-                }
+                
+                DrawAllProgressBar();
 
                 ResetTimer();
             }
         }
-
-        public static void SetupProgressBar(string prefix, float progress, string suffix)
-        {
-            lock (Mutex)
-            {
-                _ProgressBarPrefix = prefix;
-                _ProgressBarValue = progress;
-                _ProgressBarSuffix = suffix;
-            }
-            IsProgressBarActive = true;
-        }
+        
 
         private static void ResetTimer()
         {
@@ -311,45 +278,43 @@ namespace FFDaemon
                 ProgressBarTimer.Change(animationInterval, TimeSpan.FromMilliseconds(-1));
         }
 
-        private static void RefreshProgressText()
+        private static void EraseAllProgressBar()
         {
-            int progressBlockCount = (int)(_ProgressBarValue * blockCount);
-            double percent = (double)(_ProgressBarValue * 100);
-            string text = string.Format("[{0}{1}] {2,3:N1}% {3}",
-                new string('#', progressBlockCount), new string('-', blockCount - progressBlockCount),
-                percent,
-                animation[animationIndex++ % animation.Length]);
+            lock(Mutex)
+            {
+                if (DrawnProgressBar == 0)
+                    return;
+                
+                StringBuilder fullEmptyLine = new();
+                for (int i = 0; i < Console.WindowWidth; i++)
+                    fullEmptyLine.Append(" ");
 
-            ProgressText = _ProgressBarPrefix + text + _ProgressBarSuffix;
-
+                int top = Console.CursorTop;
+                for(int i = 0; i < DrawnProgressBar; i++)
+                {
+                    Console.CursorTop = top - i - 1;
+                    Console.CursorLeft = 0;
+                    Console.WriteLine(fullEmptyLine.ToString());
+                    Console.CursorTop--;
+                }
+                Console.CursorLeft = 0;
+                DrawnProgressBar = 0;
+            }                 
         }
 
-        private static void EraseProgressBar()
+        private static void DrawAllProgressBar()
         {
-            StringBuilder sb = new();
-            for (int i = 0; i < Console.WindowWidth; i++)
-                sb.Append(" ");
+            EraseAllProgressBar();
 
-            Console.CursorLeft = 0;
-            Console.Write(sb);
-            Console.CursorLeft = 0;            
-        }
-
-        private static void DrawProgressBar()
-        {
-            Console.CursorLeft = 0;
-            string writableText;
-            if (ProgressText.Length == Console.WindowWidth)
-                writableText = ProgressText;
-            else if (ProgressText.Length > Console.WindowWidth)
-                writableText = ProgressText.Substring(0, Console.WindowWidth - 3) + "...";
-            else if (ProgressText.Length < Console.WindowWidth)
-                writableText = ProgressText + new string(' ', Console.WindowWidth - ProgressText.Length);
-            else
-                throw new NotImplementedException();
-
-            Console.Write(writableText);
-            Console.CursorLeft = 0;
+            lock (Mutex)
+            {
+                DrawnProgressBar = 0;
+                foreach(var p in _ProgressBars)
+                {
+                    p.Draw();
+                    DrawnProgressBar++;
+                }                            
+            }
         }
     }
 }
