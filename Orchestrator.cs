@@ -10,9 +10,21 @@ public class Orchestrator
     object Mutex = new object();
     HashSet<string> SkipBuffer = new ();
 
-    bool ScheduleStop = false;
+    bool ShouldStop = false;
 
-    int TargetTaskCount = 0;
+    int _targetTaskCount = 0;
+    public int TargetTaskCount { 
+        get
+        {
+            lock (Mutex)
+                return _targetTaskCount;
+        }
+        set
+        {
+            lock(Mutex)
+                _targetTaskCount = value;
+        }
+    }
     HashSet<EncodingTask> RunningTasks = new();
 
     public Orchestrator()
@@ -22,6 +34,12 @@ public class Orchestrator
         Interactivity = new(this);
     }
 
+    public void ScheduleStop(bool shouldStop = true)
+    {
+        lock(Mutex)
+            ShouldStop = shouldStop;
+    }
+
     public async Task Boot()
     {
         PrintLogo();
@@ -29,7 +47,7 @@ public class Orchestrator
         Configuration.LoadFromConfigFile();
         Configuration.Print();
         Interactivity.SetupInteractivity();
-        TargetTaskCount = Configuration.InstanceCount;
+        _targetTaskCount = Configuration.InstanceCount;
 
         if (Configuration.ForcedDestinationDirectoryPath != null && !Directory.Exists(Configuration.ForcedDestinationDirectoryPath))
             Directory.CreateDirectory(Configuration.ForcedDestinationDirectoryPath);
@@ -51,11 +69,13 @@ public class Orchestrator
 
         Activity.DisableIfNeeded();
 
-        //await FirstFrame();
+        await FirstFrame();
         while (true)
         {
-            if (ScheduleStop)
-                break;
+            lock(Mutex)
+                if (ShouldStop)
+                    break;
+
             await ClassicFrame();
         }
     }
@@ -68,21 +88,27 @@ public class Orchestrator
     }
 
     #region Frames
-    /*async Task FirstFrame()
+    async Task FirstFrame()
     {
-        bool isActive;
+        bool isActive = Activity.ShouldWork();
+
+        if (!isActive)
+        {
+            FFDaemon.IOManager.Information(Flavor.Important, "Waiting ", Configuration.StartActivityBound, Flavor.Normal, $" for start...");
+            return;
+        }
+
+        var encoding = await AddNewIfNeeded();
+        if (encoding is null)
+        {
+            FFDaemon.IOManager.Information(Flavor.Ok, "Started", Flavor.Normal, $", waiting for candidate file in {Configuration.WorkingDirectoryPath} 😁.");
+            await Activity.Wait();
+            return;
+        }
 
         lock (Mutex)
-            isActive = IsActive;
-
-        if (isActive && !await Handle())
-        {
-            FFDaemon.IOManager.Information(Flavor.Important, "Ready to encode", Flavor.Normal, $" future files put in ", Configuration.WorkingDirectoryPath);
-            await Task.Delay(Configuration.WaitingTime);
-        }
-        else if (!isActive)
-            FFDaemon.IOManager.Information(Flavor.Important, "Waiting ", Configuration.StartActivityBound, Flavor.Normal, $" for start...");
-    }*/
+            RunningTasks.Add(encoding);
+    }
 
     async Task ClassicFrame()
     {

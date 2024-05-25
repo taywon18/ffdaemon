@@ -1,12 +1,27 @@
 ﻿using CommandLine;
-using FFMpegCore;
 using System.Reflection;
 using System.Text.Json;
 
 namespace FFDaemon;
 
+public class KeyConfiguration
+{
+    public ConsoleKey ForceAwakeKey { get; set; } = ConsoleKey.F1;
+    public ConsoleKey ForceSleepKey { get; set; } = ConsoleKey.F2;
+    public ConsoleKey UnforceStateKey { get; set; } = ConsoleKey.F3;
+
+    public ConsoleKey ScheduleStopKey { get; set; } = ConsoleKey.F6;
+    public ConsoleKey UnscheduleStopKey { get; set; } = ConsoleKey.F7;
+    public ConsoleKey QuitNowKey { get; set; } = ConsoleKey.F8;
+
+    public ConsoleKey IncrementFfmpegCount { get; set; } = ConsoleKey.F9;
+    public ConsoleKey DecrementFfmpegCount { get; set; } = ConsoleKey.F10;
+}
+
 public class Configuration
 {
+    public KeyConfiguration Keys { get; set; } = new KeyConfiguration();
+
     [Option('c', "config", Required = false, HelpText = "Set configuration file path")]
     public string? Config { get; set; }
     [Option('i', "interactive", Required = false, HelpText = "Set interactive mode")]

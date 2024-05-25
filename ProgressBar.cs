@@ -4,12 +4,17 @@ public class ProgressBar
 {
     object Mutex { get; } = new object();
 
+    private string DoneCharacter = "#"; //candidates: █
+    private string NotDoneCharacter = " "; //candidates: ▓░️
+    private string LeftBorderCharacter = "[";
+    private string RightBorderCharacter = "]";
+
     private const string animation = @"|/―\";
     private static int animationIndex
     {
         get
         {
-            return (int)(DateTime.Now.Ticks % 100L);
+            return (int)(DateTime.Now.Second);
         }
     }
     private const int blockCount = 10;
@@ -62,18 +67,60 @@ public class ProgressBar
         }
     }
 
-    string ProgressText
+    string AllProgressText
+    {
+        get
+        {
+            string text = string.Format("{0} {1} {2}",
+                AllBarText,
+                Percent,
+                Animation);
+
+            return Prefix + text + Suffix;
+        }
+    }
+
+    string DoneBarText
     {
         get
         {
             int progressBlockCount = (int)(Progress * blockCount);
-            double percent = (double)(Progress * 100);
-            string text = string.Format("[{0}{1}] {2,3:N1}% {3}",
-                new string('#', progressBlockCount), new string('-', blockCount - progressBlockCount),
-                percent,
-                animation[animationIndex % animation.Length]);
+            return string.Concat(Enumerable.Repeat(DoneCharacter, progressBlockCount));
+        }
+    }
 
-            return Prefix + text + Suffix;
+    string RemainBarText
+    {
+        get
+        {
+            int progressBlockCount = (int)(Progress * blockCount);
+            return string.Concat(Enumerable.Repeat(NotDoneCharacter, blockCount - progressBlockCount));
+        }
+    }
+
+    string AllBarText
+    {
+        get
+        {
+            int progressBlockCount = (int)(Progress * blockCount);
+            return string.Format("{2}{0}{1}{3}", DoneBarText, RemainBarText, LeftBorderCharacter, RightBorderCharacter);
+        }
+    }
+
+    string Percent
+    {
+        get
+        {
+            double percent = (double)(Progress * 100);
+            return string.Format("{0,3:N1}%", percent);
+        }
+    }
+
+    string Animation
+    {
+        get
+        {
+            return animation[animationIndex % animation.Length].ToString();
         }
     }
 
@@ -90,7 +137,7 @@ public class ProgressBar
     public void Draw()
     {
         string writableText;
-        string text = ProgressText;
+        string text = AllProgressText;
         if (text.Length == Console.WindowWidth)
             writableText = text;
         else if (text.Length > Console.WindowWidth)

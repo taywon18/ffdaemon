@@ -39,7 +39,7 @@ public class Activity
                     now >= Configuration.StartActivityBound || now < Configuration.StopActivityBound
                 ))))
             {
-                FFDaemon.IOManager.Debug("Leaving sleeping mode.");
+                FFDaemon.IOManager.Information("Leaving ", Flavor.Important, "🔋 sleeping mode", Flavor.Normal, ".");
                 isActive = true;
                 if (Configuration.ExecuteAfterStart is not null)
                     System.Diagnostics.Process.Start(Configuration.ExecuteAfterStart);
@@ -61,7 +61,7 @@ public class Activity
             )
             || (Configuration.StartActivityBound > Configuration.StopActivityBound && now >= Configuration.StopActivityBound && now < Configuration.StartActivityBound)))
             {
-                FFDaemon.IOManager.Debug("Entering in sleeping mode.");
+                FFDaemon.IOManager.Information("Entering in ", Flavor.Important, "💤 sleeping mode", Flavor.Normal, ".");
                 isActive = false;
                 if (Configuration.ExecuteAfterStop is not null)
                     System.Diagnostics.Process.Start(Configuration.ExecuteAfterStop);

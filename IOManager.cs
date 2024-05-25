@@ -30,6 +30,8 @@ namespace FFDaemon
         public Action OnForceSleep { get; set; } = () => { };
         public Action OnForceAwake { get; set; } = () => { };
         public Action OnUnforceState { get; set; } = () => { };
+        public Action OnIncrementInstances { get; set; } = () => { };
+        public Action OnDecrementInstances { get; set; } = () => { };
     }
 
     public static class IOManager
@@ -199,7 +201,7 @@ namespace FFDaemon
             Console.ForegroundColor = foreground;
         }
 
-        public static void StartInteractivity(CancellationToken tk = default)
+        public static void StartInteractivity(Orchestrator parent, CancellationToken tk = default)
         {
             Task.Run(async () =>
             {
@@ -208,30 +210,29 @@ namespace FFDaemon
                     if (Console.KeyAvailable)
                     {
                         ConsoleKeyInfo key = Console.ReadKey(true);
-                        switch (key.Key)
-                        {
-                            case ConsoleKey.F1:
-                                Callbacks.OnForceAwake();
-                                break;
-                            case ConsoleKey.F2:
-                                Callbacks.OnForceSleep();
-                                break;                            
-                            case ConsoleKey.F3:
-                                Callbacks.OnUnforceState();
-                                break;
+                        if(key.Key == parent.Configuration.Keys.ForceAwakeKey)
+                            Callbacks.OnForceAwake();
 
-                            case ConsoleKey.F6:
-                                Callbacks.OnScheduleStop();
-                                break;                            
-                            case ConsoleKey.F7:
-                                Callbacks.OnUnscheduleStop();
-                                break;
-                            case ConsoleKey.F8:
-                                Callbacks.OnQuit();
-                                break;
-                            default:
-                                break;
-                        }
+                        else if(key.Key == parent.Configuration.Keys.ForceSleepKey)
+                            Callbacks.OnForceSleep();
+
+                        else if (key.Key == parent.Configuration.Keys.UnforceStateKey)
+                            Callbacks.OnUnforceState();
+
+                        else if (key.Key == parent.Configuration.Keys.ScheduleStopKey)
+                            Callbacks.OnScheduleStop();
+
+                        else if (key.Key == parent.Configuration.Keys.UnscheduleStopKey)
+                            Callbacks.OnUnscheduleStop();
+
+                        else if (key.Key == parent.Configuration.Keys.QuitNowKey)
+                            Callbacks.OnQuit();
+
+                        else if (key.Key == parent.Configuration.Keys.IncrementFfmpegCount)
+                            Callbacks.OnIncrementInstances();
+
+                        else if (key.Key == parent.Configuration.Keys.DecrementFfmpegCount)
+                            Callbacks.OnDecrementInstances();
                     }
                     await Task.Delay(100);  
                 }
